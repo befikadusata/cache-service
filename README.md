@@ -50,9 +50,22 @@ The task author delegated the payload identity and storage choices to us and ask
 
 ## Planned CLI policy
 
-The CLI remains unimplemented (B15–B17). It will use `--host` for the server address,
-reserve `-h`/`--help` for help, and require a positive repeat count and exactly one input
-source: inline JSON or a file, with `-` representing stdin.
+Argument parsing is implemented in `src/cache_service/cli.py` (B15); the executable,
+HTTP requests and file I/O remain B16–B17. The parser uses Pydantic Settings, independently
+of API/database settings. Environment variables and `.env` do not supply CLI options.
+
+| Option | Policy |
+| --- | --- |
+| `--host` | HTTP/HTTPS base URL; default `http://127.0.0.1:8000` |
+| `--repeat` | Positive integer; default `1` |
+| `--input` | JSON file path, or `-` for stdin |
+| `--json` | Inline JSON; exactly one of this and `--input` is required |
+| `--output` | JSON Lines file path; default `-` for stdout |
+| `-h`, `--help` | Show help and exit successfully without requiring input |
+
+Empty source/destination strings, invalid URLs, nonpositive repeat counts, unknown flags
+and missing flag values are rejected. Parsing retains input text and file paths; payload
+validation, file access and user-facing failure diagnostics follow in B16.
 
 Each successful repeat will create or reuse a payload, read it, and write one compact JSON
 object containing `id` and `output`, followed by a newline. This JSON Lines format applies

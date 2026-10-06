@@ -68,8 +68,8 @@ Dependencies identify the required predecessor, rather than requiring every earl
 | B12 | Preserve successful transformations on later failure; publish complete payload atomically; verify safe retries | Done | B07, B09–B11 | [Payload tests](../tests/test_payloads.py); five new PostgreSQL cases, 142 full-suite tests and Ruff passed; see B12 evidence below; personal notes updated; commit titled `Verify partial success and atomic payload retries` on `feat/b12-atomic-publication-retries` |
 | B13 | Real PostgreSQL tests for timeout, cancellation, saturation, lock loss, collisions, version changes and no open transaction during transform | Done | B11, B12 | [Coordination tests](../tests/test_coordination.py), [cache tests](../tests/test_cache.py), [payload tests](../tests/test_payloads.py); 21 focused tests, 146 full-suite tests and Ruff passed against PostgreSQL; see B13 evidence below; personal notes updated; commit titled `feat: verify PostgreSQL coordination failure recovery` on `feat/b13-postgresql-failure-evidence` |
 | B14 | Multi-process identical and overlapping requests; call counts per distinct string, consistent IDs and restart reuse | Done | B12 | [Separate-process tests](../tests/test_multiprocess.py); two focused cases and 148 full-suite tests passed against PostgreSQL; Ruff passed; see B14 evidence below; personal notes updated; commit titled `feat: verify multi-process cache coordination` on `feat/b14-multiprocess-concurrency` |
-| B15 | Pydantic Settings CLI parsing; host, repeat and mutually exclusive input source validation; resolve help alias | Ready | B01 output policy; B04 | Prerequisites complete; parsing implementation pending |
-| B16 | CLI create/read loop, file/stdin/JSON input, file/stdout output, stderr diagnostics and nonzero failure exit | Waiting | B07, B15 | Implementation pending |
+| B15 | Pydantic Settings CLI parsing; host, repeat and mutually exclusive input source validation; resolve help alias | Done | B01 output policy; B04 | [Parser](../src/cache_service/cli.py), [tests](../tests/test_cli.py); 24 focused tests, 123 unit tests and Ruff passed; see B15 evidence below; personal notes updated; commit titled `feat: add CLI argument parsing and validation` on `feat/b15-cli-parsing` |
+| B16 | CLI create/read loop, file/stdin/JSON input, file/stdout output, stderr diagnostics and nonzero failure exit | Ready | B07, B15 | Prerequisites complete; execution implementation pending |
 | B17 | CLI parsing and I/O tests plus a real-service integration scenario | Waiting | B16 | Tests pending |
 | B18 | Clean Docker build and migration/start smoke test; storage reuse after restart; document supported worker/connection budget | Waiting | B03, B12, B17 | Compose exists; runtime deployment evidence pending |
 | B19 | Complete public setup, usage, configuration, architecture and limitations; reconcile every guarantee with tests | Waiting | B14, B17, B18 | Public docs exist; final usage and evidence pending |
@@ -120,7 +120,8 @@ The sandbox-only health test stalled and was interrupted; the approved rerun pas
 
 B03–B14 are complete, including partial-success preservation, atomic publication, safe retries,
 controlled PostgreSQL failure recovery and separate-process coordination. B01 CLI output
-policy is complete. Next is B15 CLI parsing, then B16–B17 CLI execution/tests and B18 deployment.
+policy and B15 CLI parsing are complete. Next is B16 CLI execution, then B17 CLI tests
+and B18 deployment.
 
 Submission is ready only when mandatory behavior, documented reliability guarantees, reproducible setup, and final checks pass; repository history is retained; private material is excluded; video meets the brief; and actual hours are reconciled. B24 remains separate from implementation completion because publishing and sending are delivery actions.
 
@@ -386,3 +387,21 @@ Verification on 2026-10-06:
 - The sandbox focused attempt stalled and was interrupted; the approved run outside the sandbox passed. Private multi-process walkthrough notes updated outside Git.
 
 HTTP requests use ASGITransport inside separate application processes. This proves cross-process PostgreSQL coordination and persisted reuse; networked deployment startup remains B18. Crash and connection-loss repeat-work limitations remain as documented in architecture and verified by B13. No application behavior or schema changes were needed.
+
+
+## B15 acceptance evidence
+
+Verification on 2026-10-07:
+
+| Check | Result and scope |
+| --- | --- |
+| `.venv/bin/pytest tests/test_cli.py -q` | 24 passed: defaults, explicit host/repeat/output, file/stdin/inline input, exactly one source, invalid values and flags, both help aliases, process arguments and environment isolation |
+| `.venv/bin/ruff check .` | Passed |
+| `.venv/bin/pytest -m 'not integration' -q` | Sandbox run stalled and was interrupted; approved rerun passed: 123 passed, 49 integration cases deselected; one existing upstream TestClient deprecation warning |
+| `git diff --check` | Passed |
+
+The parser uses Pydantic Settings without loading API/database configuration. It returns
+validated options, preserves input contents for B16, and does no HTTP or file I/O.
+Help exits successfully; parser and value errors remain exceptions for B16's entry point
+to map to stderr and a nonzero exit. No dependencies or lockfile changes were needed.
+Personal CLI learning notes updated outside Git.
