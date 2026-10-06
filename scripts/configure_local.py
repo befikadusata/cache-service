@@ -18,9 +18,10 @@ except FileExistsError:
     parser.exit(1, ".env already exists; preserve it and update it deliberately.\n")
 with os.fdopen(descriptor, "w") as output:
     output.write(
+        "DB_HOST=127.0.0.1\n"
+        "DB_USER=cache\n"
+        "DB_NAME=cache\n"
         f"DB_PASS={password}\n"
         f"DB_PORT={args.database_port}\n"
-        f"DATABASE_URL=postgresql+asyncpg://cache:{password}"
-        f"@127.0.0.1:{args.database_port}/cache\n"
     )
 print("Created .env with restricted permissions. Credentials were not printed.")

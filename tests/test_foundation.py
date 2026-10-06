@@ -10,6 +10,7 @@ from cache_service.main import create_app
 
 def test_database_configuration_is_required(monkeypatch):
     monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("DB_PASS", raising=False)
     with pytest.raises(ValidationError):
         Settings(_env_file=None)
 

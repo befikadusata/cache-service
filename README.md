@@ -32,7 +32,7 @@ python3 scripts/configure_local.py
 docker compose up --build
 ```
 
-Compose waits for PostgreSQL, runs migrations, then starts the API. Run the setup script once to generate local credentials in `.env`. `DB_PASS` supplies the database password, `DB_PORT` selects its host port, and `DATABASE_URL` connects local Python tools. Both exposed ports bind to localhost; database storage persists in a named volume.
+Compose waits for PostgreSQL, runs migrations, then starts the API. Run the setup script once to generate local credentials in `.env`. `DB_USER`, `DB_NAME`, `DB_PASS`, `DB_HOST`, and `DB_PORT` configure local database access. Compose uses `DB_USER`, `DB_NAME`, and `DB_PASS` for the database and application containers; the application connects to `database:5432`, while `DB_PORT` selects the published host port. Both exposed ports bind to localhost; database storage persists in a named volume.
 
 - `GET http://localhost:8000/health/live` checks application responsiveness.
 - `GET http://localhost:8000/health/ready` checks database connectivity and both initial tables; it returns 503 when unavailable.
@@ -60,7 +60,7 @@ uv run alembic upgrade head
 uv run uvicorn cache_service.main:create_app --factory
 ```
 
-The application requires `DATABASE_URL`. Initial pool capacity is ten connections per process, with no overflow; connection checkout, connection establishment, and ordinary database statements each have a five-second budget. These are configurable starting values, not performance claims. Lock coordination will explicitly override the statement budget for lock acquisition in its short transaction.
+The application builds its connection URL from `DB_HOST` (default `127.0.0.1`), `DB_PORT` (5432), `DB_USER` (`cache`), `DB_NAME` (`cache`), and required `DB_PASS`. Credentials are URL-escaped and masked in diagnostics. An optional nonempty `DATABASE_URL` overrides these connection values, preserving existing local configurations; omit it when using separate `DB_*` settings. Compose supplies separate settings and does not forward that local override. Initial pool capacity is ten connections per process, with no overflow; connection checkout, connection establishment, and ordinary database statements each have a five-second budget. These are configurable starting values, not performance claims. Lock coordination will explicitly override the statement budget for lock acquisition in its short transaction.
 
 ## Verification
 
@@ -91,8 +91,12 @@ make test-integration
 docker build --tag cache-service:ci .
 ```
 
-CI sets `UV_PYTHON=3.12` and `UV_LOCKED=true`, so subsequent `uv run` commands also reject a stale lockfile. Migrations use `DATABASE_URL`; integration tests use `TEST_DATABASE_URL`, both pointing to a health-checked PostgreSQL 17 service. Its disposable credentials are only for that run and require no repository secrets. For local checks, use your own migrated database URLs; avoid copying CI credentials into persistent environments.
+CI sets `UV_PYTHON=3.12` and `UV_LOCKED=true`, so subsequent `uv run` commands also reject a stale lockfile. Application and migration settings use `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_NAME`, and `DB_PASS`, pointing to a health-checked PostgreSQL 17 service. The integration step derives `TEST_DATABASE_URL` from those same settings without printing it. Its disposable credentials are only for that run and require no repository secrets. For local checks, use your own migrated database URLs; avoid copying CI credentials into persistent environments.
 
 The job has read-only repository permissions, a 15-minute timeout, and cancels superseded runs for the same branch or pull request. Checkout does not retain credentials. External actions are pinned to commit SHAs verified against their upstream release tags. See [setup-uv documentation](https://github.com/astral-sh/setup-uv/tree/v6.0.1) and [GitHub PostgreSQL service documentation](https://docs.github.com/en/actions/tutorials/use-containerized-services/create-postgresql-service-containers).
 
 Local acceptance evidence is recorded in the [backlog](docs/backlog.md#ci-acceptance-evidence). Workflow validation and local command success do not establish a successful GitHub Actions run. Docker build verification uses the existing Dockerfile, which installs dependency ranges rather than the uv lockfile.
+
+## Database container environment boundary
+
+Project configuration uses `DB_*` names, with no application-specific environment prefix. The [official PostgreSQL image](https://hub.docker.com/_/postgres) requires `POSTGRES_USER`, `POSTGRES_DB`, and `POSTGRES_PASSWORD` internally. Compose maps `DB_USER`, `DB_NAME`, and `DB_PASS` to those image keys; CI supplies matching disposable values at the same boundary. The application does not read the image-specific names. Existing volumes retain their database, role, and password: changing environment values does not rename them or rotate credentials.

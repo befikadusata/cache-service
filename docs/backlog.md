@@ -129,7 +129,7 @@ Removed the fixed development password from Compose, examples, and usage command
 
 Follow-up verification: Ruff passed; all four foundation tests passed against the rotated PostgreSQL role; Docker rebuild and migration/startup passed with the preserved volume; readiness returned HTTP 200. `docker compose --env-file /dev/null config --quiet` correctly rejected a missing password. `.env` is ignored by Git and has mode 0600.
 
-Configuration naming follow-up: removed the CACHE_ settings prefix and renamed variables to DATABASE_URL, DB_PASS, and DB_PORT throughout Compose, setup, examples, tests, and local configuration. Pool and timeout variables use their unprefixed setting names. Configuration guidance simplified; personal notes updated.
+Configuration naming follow-up: removed the former application-specific settings prefix and renamed variables to DATABASE_URL, DB_PASS, and DB_PORT throughout Compose, setup, examples, tests, and local configuration. Pool and timeout variables use their unprefixed setting names. Configuration guidance simplified; personal notes updated.
 
 Naming verification: Ruff and all four foundation tests passed; Compose configuration, image rebuild, migrations, and API startup passed. Rebuilt API readiness returned HTTP 200.
 
@@ -157,3 +157,9 @@ The initial sandbox action-tag lookup failed DNS resolution; approved execution 
 ## B04 acceptance evidence
 
 On 2026-10-06, `.venv/bin/pytest tests/test_schemas.py -q` passed all 18 tests; `.venv/bin/ruff check .` and `git diff --check` passed. Contract, strict request models, response serialization, configurable limits and finite positive deadline settings are verified. Personal notes updated. HTTP endpoint wiring and runtime deadline enforcement are pending B07/B11; no payload runtime evidence is claimed. Recorded in the commit titled `Define payload API contract and validation` on `feat/payload-contract`.
+
+## Database naming consistency follow-up
+
+Project configuration now exposes DB_HOST, DB_PORT, DB_USER, DB_NAME and DB_PASS in settings, Compose, local generation, examples and CI. DATABASE_URL remains an explicit override for existing local setups. PostgreSQL image keys are retained only at the documented container boundary. URL construction escapes credentials and preserves SecretStr masking. Existing database volumes are unchanged. Commit subject: `Standardize database configuration names`.
+
+Verification: full `.venv/bin/pytest -q` passed all 27 tests with TEST_DATABASE_URL set from masked local settings, including real PostgreSQL readiness. Readiness also returned 200 using DB_* settings without a DATABASE_URL override. Ruff, actionlint v1.7.7, Compose configuration and git diff whitespace checks passed. One upstream Starlette TestClient deprecation warning remains.
