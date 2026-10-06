@@ -30,6 +30,31 @@ Verify externally observable behavior and cache guarantees. Unit tests isolate t
 | Slow transformation | Configured deadline applies; no transaction remains open during the call |
 | CLI parsing and I/O | All declared modes work; invalid inputs and server failures produce useful errors |
 
+## Guarantee evidence
+
+These references map current documentation to implemented checks. Recorded execution outcomes
+are in the [backlog](backlog.md); this mapping does not claim a new full-suite run. PostgreSQL
+checks require a migrated database and `TEST_DATABASE_URL`; they skip when it is absent.
+
+| Documented behavior | Supporting checks | Scope and limits |
+| --- | --- | --- |
+| Strict lists, equal lengths, configured character/item limits, invalid JSON/UUID rejection | [Schemas](../tests/test_schemas.py), [payload validation](../tests/test_payloads.py): `test_invalid_payload_is_rejected_before_database_access`, `test_request_validation_uses_configured_limits`, `test_custom_limit_can_exceed_default`, `test_malformed_json_and_uuid_are_rejected_before_database_access` | Application validation; no raw-body byte limit |
+| Unicode uppercase and alternating output, duplicates and empty elements | [Transformation tests](../tests/test_transformation.py), [payload tests](../tests/test_payloads.py): `test_empty_and_unknown_payload`, `test_create_read_reuse_and_restart` | Current uppercase implementation; output is a joined string, not a reversible list encoding |
+| Exact ordered identity; case, whitespace, boundaries, order, version affect reuse | [Identity vectors](../tests/test_identity.py), [payload tests](../tests/test_payloads.py): `test_api_identity_preserves_exact_ordered_inputs`, `test_version_change_creates_new_id_and_keeps_old_payload_readable` | UUIDs persist in existing storage; new databases generate new IDs |
+| Known ID retrieval, 404 for unknown ID, same ID on reuse and concurrent publication | [Payload tests](../tests/test_payloads.py): `test_create_read_reuse_and_restart`, `test_empty_and_unknown_payload`, `test_concurrent_publication_returns_authoritative_id` | Complete committed payloads only |
+| Distinct-source deduplication, batched reads, reuse across payloads/restart | [Cache tests](../tests/test_cache.py): `test_deduplication_batch_reads_and_no_transaction_during_transform`, `test_large_cached_request_uses_bounded_batches`, `test_payload_overlap_and_restart_reuse_cached_strings` | Batches of at most 500 digests; misses processed sequentially |
+| Commit before unlock; no transaction during transformation; same session recheck | [Cache tests](../tests/test_cache.py): `test_concurrent_miss_waits_then_rechecks_on_same_session`, `test_deduplication_batch_reads_and_no_transaction_during_transform` | A physical connection remains occupied during the call |
+| Healthy concurrent workers share successful missing-string work | [Separate-process tests](../tests/test_multiprocess.py): `test_processes_coordinate_calls_and_restart_reuses_storage` | Identical/overlapping payloads with real advisory contention; no throughput claim |
+| Successful results survive later failure, timeout, cancellation, or publication rollback | [Payload tests](../tests/test_payloads.py): `test_partial_success_survives_interruption_and_restart`, `test_publication_rollback_preserves_cache_and_retry_avoids_transform`; [cache tests](../tests/test_cache.py): `test_failure_retains_successful_results_and_retries_only_misses` | Complete payload rolls back; prior per-string commits remain |
+| Admission, checkout and advisory waiting fail safely without uncoordinated fallback | [Coordination tests](../tests/test_coordination.py): `test_saturated_admission_preserves_read_capacity_and_recovers`, `test_checkout_timeout_releases_admission`, `test_lock_wait_timeout_does_not_transform_and_retry_succeeds`, `test_admission_failure_returns_retryable_503` | Controlled capacity settings; 503 with Retry-After for payload operations |
+| Transformer and generation deadlines | [Coordination tests](../tests/test_coordination.py): `test_transform_deadline_returns_504_and_releases_connection`; [payload tests](../tests/test_payloads.py): `test_generation_deadline_does_not_publish_and_retry_succeeds` | Cooperative async work; cleanup can extend response latency. GET has a configured outer deadline in `main.py`, but no dedicated slow-GET integration test |
+| Cancellation, uncertain acquisition, failed unlock, and stalled cleanup dispose ownership | [Coordination tests](../tests/test_coordination.py): `test_cleanup_survives_repeated_cancellation`, `test_cancellation_during_server_lock_wait_releases_capacity`, `test_uncertain_acquisition_is_discarded_and_wait_settings_do_not_leak`, `test_cleanup_timeout_force_closes_session_and_releases_lock`, `test_unconfirmed_unlock_discards_session_and_preserves_committed_result` | Force-close path depends on asyncpg and an available event loop |
+| Lock-key collisions serialize safely; digest collisions never reuse mismatched data | [Coordination tests](../tests/test_coordination.py): `test_advisory_key_collision_serializes_without_reusing_wrong_result`; [cache tests](../tests/test_cache.py): `test_collision_is_rejected_at_lookup_and_readback`; [payload tests](../tests/test_payloads.py): `test_payload_digest_collision_is_rejected`, `test_collision_on_publication_readback_is_rejected` | Forced collisions establish rejection; storage does not support both colliding identities |
+| Connection loss can repeat external work without stale publication | [Coordination tests](../tests/test_coordination.py): `test_backend_loss_allows_repeat_work_but_never_publishes_stale_result` | Backend terminated while transformer is paused; no universal exactly-once guarantee |
+| CLI flags, environment isolation, input/output modes, incremental JSON Lines, safe failures | [Parsing](../tests/test_cli.py), [execution](../tests/test_cli_execution.py), [live CLI](../tests/test_cli_integration.py) | MockTransport unit checks plus live Uvicorn/PostgreSQL subprocess checks; no automatic retries |
+| Masked connection diagnostics, valid settings, health checks | [Database settings](../tests/test_database_settings.py), [foundation](../tests/test_foundation.py), [coordination settings](../tests/test_coordination.py): `test_capacity_and_budgets_are_validated` | Readiness checks connectivity and two tables, not all schema constraints; validation responses may echo input |
+| Packaged startup, clean migration, HTTP/CLI access, cache and ID reuse after recreation | [Deployment script](../scripts/verify_deployment.py), [procedure](#docker-deployment) | Fresh isolated Docker project, one worker, retained volume; no backup/restore test |
+
 ## Concurrency evidence
 
 Use controlled synchronization so requests actually overlap before a result is cached. Arbitrary sleeps alone can conceal races. Count transformer invocations by input value: one payload containing several distinct strings requires several transformations.
@@ -41,7 +66,7 @@ application processes. IPC reports transformer calls; an event pauses the first 
 until PostgreSQL reports a real waiter on its advisory key. A fresh process then verifies
 payload ID reuse and a new input composed from persisted strings without transformer calls.
 The requests use in-process HTTP transport within each child; networked deployment evidence
-is tracked separately in B18.
+is recorded in the [Docker deployment procedure](#docker-deployment).
 
 ## CLI evidence
 
@@ -70,7 +95,8 @@ uv run pytest tests/test_cli_integration.py -q
 ```
 
 The normal integration suite and CI include these tests. This verifies current source over
-real HTTP and PostgreSQL; Docker image startup and restart evidence remain B18 work.
+real HTTP and PostgreSQL; the [Docker deployment check](#docker-deployment) verifies
+packaged startup and restart persistence separately.
 
 ## Docker deployment
 

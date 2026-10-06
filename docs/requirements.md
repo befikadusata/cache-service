@@ -42,7 +42,7 @@ See the [README assumptions](../README.md#assessment-assumptions) for rationale.
   Escape embedded newlines through JSON encoding. Emit each record after creation and read
   succeed, including when an ID is reused. On failure, stop with a nonzero exit status and no
   result record for the failed iteration; retain earlier complete records.
-- The [payload API contract](api-contract.md) freezes schemas, HTTP statuses, configurable input limits and overall deadlines. Routes and runtime enforcement follow in B07/B11; coordination capacity remains B11 work.
+- The [payload API contract](api-contract.md) freezes schemas, HTTP statuses, configurable input limits and overall deadlines. Routes, runtime deadlines, and coordination capacity are implemented; [verification](verification.md#guarantee-evidence) maps their guarantees to evidence.
 
 ## Additional reliability goals
 

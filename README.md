@@ -4,10 +4,10 @@ A FastAPI service that transforms two lists of strings, interleaves their result
 
 ## Project status
 
-The foundation and payload endpoints are implemented: strict validation, uppercase transformation,
-alternating composition, PostgreSQL storage, and reuse of identifiers for identical inputs.
-Per-string transformation caching and bounded session advisory coordination are implemented.
-Broader failure/concurrency verification and the CLI remain planned work.
+Payload endpoints, persistent transformation caching, bounded PostgreSQL coordination, and
+the CLI are implemented. Failure recovery, separate-process contention, live CLI requests,
+and Docker restart persistence have recorded verification evidence. Final review and delivery
+remain tracked in the [backlog](docs/backlog.md).
 
 ## Payload API
 
@@ -35,10 +35,10 @@ payloads reuse those results, and duplicates within a request are transformed on
 results survive a later transformer failure so retries only transform remaining misses. Cache
 reads are batched; conflicting inserts use verified authoritative readback. Each missing string
 holds one session advisory lock, rechecks the cache after acquisition, and commits on that same
-connection before unlock. No transaction spans transformation. Initial concurrent-session tests
-pass. B11 adds bounded admission, separate wait deadlines and cancellation-protected cleanup.
-Broader failure and multi-process evidence remain B13–B14 work.
-Crashes or connection loss can still cause repeated external calls.
+connection before unlock. No transaction spans transformation. Admission and lock waits are
+bounded, and cleanup is protected against cancellation. Controlled separate-process tests
+verify shared work for identical and overlapping requests. Crashes or connection loss can
+still cause repeated external calls; see [guarantees and evidence](docs/verification.md#guarantee-evidence).
 
 ## Assessment assumptions
 
@@ -108,13 +108,14 @@ against a live Uvicorn API and PostgreSQL; see [CLI evidence](docs/verification.
 - [Implementation and submission backlog](docs/backlog.md)
 - [Requirements and acceptance criteria](docs/requirements.md)
 - [Payload API contract](docs/api-contract.md)
+- [Configuration reference](docs/configuration.md)
 - [Architecture decisions](docs/architecture.md)
 - [Implementation plan](docs/implementation-plan.md)
 - [Verification strategy](docs/verification.md)
 
 ## Docker startup
 
-From this directory, run:
+Requires Docker with the Compose plugin. From this directory, run:
 
 ```sh
 python3 scripts/configure_local.py
@@ -165,12 +166,28 @@ Requires Python 3.12–3.14 and uv. Start PostgreSQL first:
 ```sh
 python3 scripts/configure_local.py  # once, before starting Compose
 docker compose up -d database
-uv sync
+uv sync --locked
 uv run alembic upgrade head
 uv run uvicorn cache_service.main:create_app --factory
 ```
 
-The application builds its connection URL from `DB_HOST` (default `127.0.0.1`), `DB_PORT` (5432), `DB_USER` (`cache`), `DB_NAME` (`cache`), and required `DB_PASS`. Credentials are URL-escaped and masked in diagnostics. An optional nonempty `DATABASE_URL` overrides these connection values, preserving existing local configurations; omit it when using separate `DB_*` settings. Compose supplies separate settings and does not forward that local override. Initial pool capacity is ten connections per process, with no overflow; connection checkout, connection establishment, and ordinary database statements each have a five-second budget. These are configurable starting values, not performance claims. Coordination admits at most eight active misses per process, reserving two pool connections for ordinary operations. Admission has a five-second budget; advisory waiting has 35 seconds, transformation 30 seconds, and cleanup five seconds. Configure these through the settings in the [API contract](docs/api-contract.md). COORDINATION_SLOTS must be lower than POOL_SIZE. Count both holders and lock waiters toward coordination capacity. Across N workers, allow up to N × POOL_SIZE database connections, plus migration and administration connections. Each worker uses one application engine; additional engines have independent pools and admission limits. Transaction-mode PgBouncer is unsupported.
+The application builds its connection URL from `DB_HOST` (default `127.0.0.1`), `DB_PORT` (5432), `DB_USER` (`cache`), `DB_NAME` (`cache`), and required `DB_PASS`. Credentials are URL-escaped and masked in diagnostics. An optional nonempty `DATABASE_URL` overrides these connection values, preserving existing local configurations; omit it when using separate `DB_*` settings. Compose supplies separate settings and does not forward that local override. Initial pool capacity is ten connections per process, with no overflow; connection checkout, connection establishment, and ordinary database statements each have a five-second budget. These are configurable starting values, not performance claims. Coordination admits at most eight active misses per process, reserving two pool connections for ordinary operations. Admission has a five-second budget; advisory waiting has 35 seconds, transformation 30 seconds, and cleanup five seconds. See [configuration](docs/configuration.md) for settings, validation, and Compose overrides. COORDINATION_SLOTS must be lower than POOL_SIZE. Count both holders and lock waiters toward coordination capacity. Across N workers, allow up to N × POOL_SIZE database connections, plus migration and administration connections. Each worker uses one application engine; additional engines have independent pools and admission limits. Transaction-mode PgBouncer is unsupported.
+
+## Limitations
+
+The transformer uses Python Unicode uppercase conversion (`uppercase-v1`). A replacement
+must be asynchronous and use a new version when its semantics change. Missing strings are
+processed sequentially; external calls retain a pooled connection and session lock. Direct
+PostgreSQL connections are required. Tests establish controlled coordination and recovery,
+without establishing production throughput or exactly-once external execution across crashes.
+
+Stored sources, canonical inputs, and outputs are plaintext in PostgreSQL. No authentication,
+automatic expiry, deletion API, or transport-level request-body limit is provided. Compose
+binds published ports to localhost. Character limits apply after JSON parsing and do not bound
+raw request bytes or uppercase expansion. API validation errors may include submitted values;
+operational errors and CLI diagnostics use generic messages. Complete committed data survives
+container recreation while the volume remains; backup and restore are outside current verification.
+Docker installs dependency ranges, while local development and CI use `uv.lock`.
 
 ## Verification
 
@@ -208,7 +225,7 @@ CI sets `UV_PYTHON=3.12` and `UV_LOCKED=true`, so subsequent `uv run` commands a
 
 The job has read-only repository permissions, a 15-minute timeout, and cancels superseded runs for the same branch or pull request. Checkout does not retain credentials. External actions are pinned to commit SHAs verified against their upstream release tags. See [setup-uv documentation](https://github.com/astral-sh/setup-uv/tree/v6.0.1) and [GitHub PostgreSQL service documentation](https://docs.github.com/en/actions/tutorials/use-containerized-services/create-postgresql-service-containers).
 
-Local acceptance evidence is recorded in the [backlog](docs/backlog.md#ci-acceptance-evidence). Workflow validation and local command success do not establish a successful GitHub Actions run. Docker build verification uses the existing Dockerfile, which installs dependency ranges rather than the uv lockfile.
+Local acceptance evidence is recorded in the [backlog](docs/backlog.md#ci-acceptance-evidence). The recorded hosted CI run passed; it predates later implementation steps, so final review must check the current revision separately. Docker build verification uses the existing Dockerfile, which installs dependency ranges rather than the uv lockfile.
 
 ## Database container environment boundary
 

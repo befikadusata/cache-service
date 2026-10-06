@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This Python 3.12–3.14 project provides a FastAPI service backed by PostgreSQL. Source lives in `src/cache_service/`: `main.py` defines the application and health endpoints, `config.py` validates settings, and `database.py` configures the async engine. Alembic revisions belong in `migrations/versions/`; tests live in `tests/`. Consult `docs/architecture.md`, `docs/requirements.md`, and `docs/backlog.md` before changing behavior. Payload endpoints, transformation caching, and the CLI remain planned work.
+This Python 3.12–3.14 project provides a FastAPI service backed by PostgreSQL. Source lives in `src/cache_service/`: `main.py` defines the application and health endpoints, `config.py` validates settings, and `database.py` configures the async engine. Alembic revisions belong in `migrations/versions/`; tests live in `tests/`. Consult `docs/architecture.md`, `docs/requirements.md`, and `docs/backlog.md` before changing behavior. Payload endpoints, persistent transformation caching, and the CLI are implemented; final review and delivery remain tracked in the backlog.
 
 ## Build, Test, and Development Commands
 

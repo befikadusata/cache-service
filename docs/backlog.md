@@ -57,7 +57,7 @@ Dependencies identify the required predecessor, rather than requiring every earl
 | B01 | Record author response, identity/storage choices and transformer assumption; resolve CLI flag conflict and output format | Done | None | Author delegated identity/storage; [README assumptions](../README.md#assessment-assumptions) and [CLI policy](../README.md#cli-usage) recorded; JSON Lines selected; documentation consistency and `git diff --check` passed; personal notes updated; commit titled `feat: define CLI JSON Lines output policy` on `feat/b01-cli-output-policy` |
 | B02 | Application lifecycle, PostgreSQL configuration, migration and Compose; inspect setup artifacts | Done | None | [Application](../src/cache_service/main.py), [migration](../migrations/versions/0001_initial.py), [Compose](../compose.yaml); commit `6a492e7` |
 | B03 | Install dependencies, generate lockfile, run lint and foundation tests, apply clean migration, check both health endpoints and image startup | Done | B02; execution/network access | Runtime checks passed on 2026-10-06; `uv.lock` generated; PostgreSQL host port 55432; see verification record below; personal notes updated |
-| B04 | Freeze POST and GET response schemas, strict input validation, empty behavior, configurable limits and request deadlines | Done | Selected B01 assumptions | [Contract](api-contract.md), [models](../src/cache_service/schemas.py), [settings](../src/cache_service/config.py), [tests](../tests/test_schemas.py); 18 focused tests and Ruff passed; personal notes updated; commit titled `Define payload API contract and validation`. Endpoint enforcement remains B07/B11 |
+| B04 | Freeze POST and GET response schemas, strict input validation, empty behavior, configurable limits and request deadlines | Done | Selected B01 assumptions | [Contract](api-contract.md), [models](../src/cache_service/schemas.py), [settings](../src/cache_service/config.py), [tests](../tests/test_schemas.py); 18 focused tests and Ruff passed; personal notes updated; commit titled `Define payload API contract and validation`. Endpoint enforcement completed in B07/B11 |
 | B05 | Define canonical encoding, version and digest identities; verify list boundaries, order, whitespace and collision handling | Done | B04 | [Identity helpers](../src/cache_service/identity.py), [tests](../tests/test_identity.py), exact format in [architecture](architecture.md); 18 focused tests and 44 unit tests passed; personal notes updated; commit titled `Add versioned input identities` on `feat/versioned-identities` |
 | B06 | Replaceable uppercase transformer and alternating composition; meaningful isolated tests | Done | B04 | [Transformer and composition](../src/cache_service/transformation.py), [tests](../tests/test_transformation.py); 21 focused tests, 65 unit tests and Ruff passed; personal notes updated; commit titled `feat: add replaceable transformer and payload composition` on `feat/b06-transformer-composition` |
 | B07 | Create and read complete payloads; generated UUID plus unique input digest; duplicate creation returns stored ID | Done | B03–B06 | [Payload flow](../src/cache_service/payloads.py), [routes](../src/cache_service/main.py), [tests](../tests/test_payloads.py); 80 tests and Ruff passed, including real PostgreSQL publication races and restart reuse; personal notes updated; commit titled `feat: add payload creation and retrieval` on `feat/b07-payload-endpoints` |
@@ -72,8 +72,8 @@ Dependencies identify the required predecessor, rather than requiring every earl
 | B16 | CLI create/read loop, file/stdin/JSON input, file/stdout output, stderr diagnostics and nonzero failure exit | Done | B07, B15 | [Executable](../src/cache_service/cli.py), [execution tests](../tests/test_cli_execution.py), [usage](../README.md#cli-usage); 49 focused CLI tests, 148 unit tests and Ruff passed; see B16 evidence below; personal notes updated; commit titled `Add CLI execution and JSON Lines output` on `feat/b16-cli-execution` |
 | B17 | CLI parsing and I/O tests plus a real-service integration scenario | Done | B16 | [CLI tests](../tests/test_cli_execution.py), [live-service tests](../tests/test_cli_integration.py), [verification](verification.md#cli-evidence); two focused live-service cases and 201 full-suite tests passed against PostgreSQL; Ruff passed; personal notes updated; commit titled `Verify CLI against live API and PostgreSQL` on `feat/b17-cli-verification` |
 | B18 | Clean Docker build and migration/start smoke test; storage reuse after restart; document supported worker/connection budget | Done | B03, B12, B17 | [Deployment smoke script](../scripts/verify_deployment.py), [procedure](verification.md#docker-deployment), worker/connection guidance in README and architecture; all runtime checks and Ruff passed on 2026-10-07; see B18 evidence below; personal notes updated; commit titled `Verify Docker deployment and restart persistence` |
-| B19 | Complete public setup, usage, configuration, architecture and limitations; reconcile every guarantee with tests | Ready | B14, B17, B18 | Prerequisites complete; public docs exist; final reconciliation pending |
-| B20 | Final code review and requirement audit; full required suite passes; remove unnecessary complexity and inspect repository contents | Waiting | B13, B14, B17–B19 | Final review pending |
+| B19 | Complete public setup, usage, configuration, architecture and limitations; reconcile every guarantee with tests | Done | B14, B17, B18 | [Configuration](configuration.md), [guarantee evidence](verification.md#guarantee-evidence), README, API contract and architecture reconciled with current code/tests; documentation checks, CLI help, Ruff and whitespace checks passed; see B19 evidence below; personal notes updated |
+| B20 | Final code review and requirement audit; full required suite passes; remove unnecessary complexity and inspect repository contents | Ready | B13, B14, B17–B19 | Final review pending |
 | B21 | Preserve real incremental commits; verify neutral repository name and public artifacts contain no personal preparation or secrets | Ready | Ongoing; final audit B20 | Development commits recorded below; private preparation is outside repository; credential configuration hardened and personal notes updated |
 | B22 | Prepare and record English walkthrough with camera and screen, code trace, CLI and tests; verify duration at most 15 minutes | Waiting | B20 | Personal rehearsal remains in sibling private workspace; candidate records video |
 | B23 | Track actual time from available records; candidate reconciles previous work; report honest total without estimating missing history as fact | Ready | Ongoing | No authoritative total yet; candidate confirmation required |
@@ -121,7 +121,8 @@ The sandbox-only health test stalled and was interrupted; the approved rerun pas
 B03–B14 are complete, including partial-success preservation, atomic publication, safe retries,
 controlled PostgreSQL failure recovery and separate-process coordination. B01 CLI output
 policy, B15 CLI parsing, B16 CLI execution and B17 live-service verification are complete.
-B18 deployment verification is complete. Next is B19 documentation reconciliation.
+B18 deployment verification and B19 documentation reconciliation are complete.
+Next is B20 final code review, requirement audit, and full required-suite verification.
 
 Submission is ready only when mandatory behavior, documented reliability guarantees, reproducible setup, and final checks pass; repository history is retained; private material is excluded; video meets the brief; and actual hours are reconciled. B24 remains separate from implementation completion because publishing and sending are delivery actions.
 
@@ -472,3 +473,30 @@ storage, real HTTP 502 diagnostics, nonzero exit and preserved partial success. 
 also explicitly checks interrupt status and rejects invalid input before constructing a client.
 The existing CI integration command discovers these tests without workflow changes; no hosted
 B17 run has been observed yet. Docker deployment evidence remains B18. Personal notes updated.
+
+
+## B19 acceptance evidence
+
+Documentation reconciliation on 2026-10-07:
+
+- README, API contract, requirements, architecture, verification, and repository guidelines
+  now describe completed payload, cache, concurrency, CLI, and deployment work. Historical
+  staged verification records above retain their original scope and outcomes.
+- Added a configuration reference covering settings precedence, validated defaults, credentials,
+  local versus container ports, explicit Compose budget overrides, and worker connection capacity.
+  Local dependency installation uses `uv sync --locked`.
+- Added a guarantee-to-test mapping, with named checks for validation, identity, cache reuse,
+  transactions, failure recovery, publication, coordination, CLI, health, and deployment.
+  Clarified evidence limits: controlled concurrency is not throughput evidence; GET's outer
+  deadline has no dedicated slow-GET integration test; volume reuse is not backup/restore evidence.
+- Clarified limits of the implemented service, including plaintext storage, no automatic expiry,
+  no authentication or raw-body byte limit, validation responses that may include input, and
+  repeated external work after ownership loss. No application behavior or schema was changed.
+- Read and compared current settings, application, persistence, identity, CLI, Compose, Dockerfile,
+  setup script, and test definitions. A stdlib documentation check passed for local link targets
+  and all 37 named evidence references. All 14 documented numeric defaults matched Settings.
+- `.venv/bin/cache-service --help`, `.venv/bin/ruff check .`, and `git diff --check` passed.
+  No new pytest, Docker runtime, or hosted CI execution is claimed for this documentation change;
+  prior runtime evidence remains recorded under B13–B18, and B20 requires final suite execution.
+- Personal walkthrough notes updated outside Git. B20 is now ready; video and submission remain
+  separate delivery work.

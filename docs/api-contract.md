@@ -1,9 +1,8 @@
-# Payload API contract (B04)
+# Payload API contract
 
-Payload routes are implemented in B07, including configured input validation and overall
-POST/GET deadlines. B09 implements per-string caching and request deduplication. Coordination,
-capacity and protected cleanup are implemented through B11; broader failure and multi-process
-evidence remain B13–B14 work.
+Payload routes enforce configured input validation and overall POST/GET deadlines.
+Per-string caching, bounded coordination, and protected cleanup are implemented.
+See [guarantee evidence](verification.md#guarantee-evidence) for supporting tests and scope.
 
 `POST /payloads` accepts a JSON object containing exactly `list1` and `list2`.
 Both must be arrays of strings of equal length. Missing fields, extra fields,
@@ -41,7 +40,9 @@ transformer version change.
 | TRANSFORMATION_TIMEOUT_SECONDS | 30 | Each external transformation call |
 | CLEANUP_TIMEOUT_SECONDS | 5 | Cleanup, split between graceful release and forced disposal |
 
-Limits must be positive integers; deadlines must be positive finite numbers.
+Input limits must be positive integers; deadlines must be positive finite numbers.
+POOL_SIZE must be between 2 and 100 and COORDINATION_SLOTS must be at least 1 and
+less than POOL_SIZE. See [configuration](configuration.md) for environment propagation.
 `PayloadCreate.model_validate(data, context={"settings": settings})` applies the
 configured limits; without context it uses defaults. POST validation passes app settings,
 including when configured limits exceed defaults. These are initial safety budgets, subject to integration
@@ -57,10 +58,10 @@ Retries reuse already committed results.
 Operational errors use `{"detail": "<generic message>"}`: 503 for admission,
 pool, lock-wait or database unavailability; 504 for transformation or overall
 request deadline; 502 for transformer failure; 500 for invariant or digest collision
-failure. Responses and logs must not expose raw input or database credentials.
+failure. Operational responses and application warning messages omit raw input and database credentials.
+FastAPI validation errors may include the submitted value in their `input` field.
 Clients may retry 502/503/504 with bounded backoff using identical input; validation
-failures require correcting input. Numeric coordination and cleanup budgets remain
-B11 work. No uncoordinated fallback is permitted.
+failures require correcting input. No uncoordinated fallback is permitted.
 
 
 B11 waits for admission before connection checkout and releases admission only after cleanup.
@@ -72,5 +73,5 @@ its asyncpg socket before invalidation and close. Cleanup can extend the overall
 by its configured budget. These bounds rely on cooperative async operations and an available
 event loop; a blocking transformer must be adapted before use.
 
-503 responses include Retry-After: 1. Clients may retry with backoff; 502 and 504 retries can
+Payload-operation 503 responses include Retry-After: 1. Clients may retry with backoff; 502 and 504 retries can
 reuse committed transformations but may repeat externally completed, uncommitted work.

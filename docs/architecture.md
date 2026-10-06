@@ -13,7 +13,7 @@ protocol, and `uppercase_transform` implements the `uppercase-v1` identity seman
 Python's Unicode `str.upper()`. Whitespace and punctuation remain intact; some Unicode
 characters expand, such as `ß` becoming `SS`. Replacements must use the matching identity
 version when their semantics change. Transformer exceptions propagate to the application
-layer for later HTTP mapping and successful-result-only caching.
+layer for HTTP mapping and successful-result-only caching.
 
 `compose_output` accepts already transformed sequences, alternates their elements and joins
 them with `, `. It preserves duplicates and empty elements, returns `""` for two empty
@@ -78,7 +78,7 @@ A payload record stores a generated UUID, input digest, canonical input includin
 
 Identity helpers are implemented in `src/cache_service/identity.py` and accept already validated inputs. Canonical JSON uses lexicographically sorted keys, separators `,` and `:`, no formatting whitespace, and ASCII Unicode escapes (`ensure_ascii=True`). Hash the resulting text encoded as UTF-8 with SHA-256, retaining the full 32-byte digest. Payload objects contain exactly `list1`, `list2`, and `version`; transformation objects contain exactly `source` and `version`. For example, empty payload input is `{"list1":[],"list2":[],"version":"uppercase-v1"}`. Preserve list boundaries, element order, duplicate multiplicity, case, whitespace, and exact Unicode code points without normalization. ASCII escaping is a representation choice and does not expand the database's supported text values.
 
-Use SHA-256 for database lookup keys rather than indexing unbounded source text. Despite its column name, `source_digest` hashes the canonical transformation object including version; the database primary key retains its separate version column. After every lookup or conflict readback, compare retained canonical input for payloads, or both version and exact source for transformations. The identity helpers raise `IdentityCollisionError` on mismatch with a fixed message containing no raw input. Supporting both colliding values is outside scope. Payload persistence and HTTP collision mapping are implemented in B07; transformation-cache persistence is implemented in B09, and coordination error mapping remains B11 work.
+Use SHA-256 for database lookup keys rather than indexing unbounded source text. Despite its column name, `source_digest` hashes the canonical transformation object including version; the database primary key retains its separate version column. After every lookup or conflict readback, compare retained canonical input for payloads, or both version and exact source for transformations. The identity helpers raise `IdentityCollisionError` on mismatch with a fixed message containing no raw input. Supporting both colliding values is outside scope. Payload persistence and HTTP collision mapping are implemented in B07; transformation-cache persistence is implemented in B09, and coordination error mapping is implemented in `main.py`.
 
 Transformer version is an explicit implementation constant identifying behavior. Change it when transformation semantics change. Include it in both identity types and advisory-lock derivation. Existing payloads remain readable by identifier after a version change; the service does not automatically migrate or delete old cache entries.
 
@@ -101,7 +101,8 @@ READ COMMITTED provides a fresh statement snapshot. A conflict can skip an inser
 
 ## Connection and cleanup contract
 
-The lock holder reuses its connection for all work needed to persist its result. It must not acquire another pooled connection while holding the lock. Request code holds no database session across the transformation flow.
+The lock holder reuses its connection for all work needed to persist its result. It must not acquire another pooled connection while holding the lock. Payload orchestration holds no separate database connection while the cache layer
+retains its checked-out lock session during a missing-string transformation.
 
 Session locks survive commits and rollbacks, and repeated acquisition by the same session stacks ownership. Acquire once and unlock once. On failure, roll back an aborted transaction before attempting unlock. Rollback alone does not release this lock. See [PostgreSQL advisory locks](https://www.postgresql.org/docs/current/explicit-locking.html#ADVISORY-LOCKS).
 
@@ -117,7 +118,7 @@ Use separate configurable budgets for admission, checkout, advisory waiting, tra
 
 Use a blocking advisory acquisition with a transaction-local lock timeout. The statement timeout for that acquisition must permit the intended wait. Scope settings to the transaction so pooled connections do not leak configuration. The wait budget should normally accommodate transformation and persistence plus margin; it is not a correctness dependency. Lock-wait timeout limits waiting, not ownership duration. See [PostgreSQL timeout settings](https://www.postgresql.org/docs/current/runtime-config-client.html).
 
-Never fall back to uncoordinated transformation after a lock timeout. Return 503 for admission, pool, lock-wait, or database unavailability; return 504 for transformer or overall-generation timeout; return 502 for an external transformation failure. Retry guidance should be explicit. Internal invariant or digest-collision failures return a generic server error and are logged without exposing raw input. Initial input and overall deadline defaults are defined in the [API contract](api-contract.md). Initial B11 budgets are listed in the API contract; synthetic timeout and recovery tests verify
+Never fall back to uncoordinated transformation after a lock timeout. Return 503 for admission, pool, lock-wait, or database unavailability; return 504 for transformer or overall-generation timeout; return 502 for an external transformation failure. Retry guidance should be explicit. Internal invariant or digest-collision failures return a generic server error and are logged without exposing raw input. Input, deadline, and coordination defaults are defined in the [API contract](api-contract.md); synthetic timeout and recovery tests verify
 mechanics rather than establish production performance.
 
 ## Deployment and guarantees
@@ -147,7 +148,7 @@ Prove API behavior, restart persistence, multi-process coordination, overlapping
 Parallelizing strings requires revisiting capacity and connection ownership. Bulk lock acquisition requires ordering actual lock keys. Transaction-mode pooling requires a different coordination mechanism. A future requirement for output-based identity or filesystem payload storage would require revisiting the selected identity and persistence decisions.
 
 
-## B11 implementation trace
+## Coordination implementation trace
 
 `create_engine` attaches one `Coordination` instance to engine execution options. Its semaphore
 is shared by every cache operation using that application engine. Admission ends before checkout
