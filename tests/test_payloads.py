@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import text
+from sqlalchemy import event, text
 
 from cache_service.config import Settings
 from cache_service.identity import payload_identity
@@ -163,6 +163,168 @@ async def test_failed_transform_does_not_publish(payload_app):
             "output": f"{marker.upper()}, FAIL {marker.upper()}"
         }
         assert (await client.post("/payloads", json=data)).json() == {"id": identifier}
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("interruption", ["failure", "timeout", "cancellation"])
+async def test_partial_success_survives_interruption_and_restart(payload_app, interruption):
+    observer, marker = payload_app
+    good, bad, later = (f"{name} {marker}" for name in ("good", "bad", "later"))
+    data = {"list1": [good, bad], "list2": [later, good]}
+    identity = payload_identity(**data)
+    started, release = asyncio.Event(), asyncio.Event()
+    calls = []
+
+    async def interrupted(source):
+        calls.append(source)
+        if source == bad:
+            started.set()
+            await release.wait()
+            raise ValueError("private transformer diagnostics")
+        return source.upper()
+
+    settings = Settings(
+        database_url=os.environ["TEST_DATABASE_URL"],
+        transformation_timeout_seconds=1 if interruption == "timeout" else 30,
+    )
+    application = create_app(settings, transformer=interrupted)
+    async with application.router.lifespan_context(application):
+        async with AsyncClient(
+            transport=ASGITransport(app=application), base_url="http://test"
+        ) as client:
+            task = asyncio.create_task(client.post("/payloads", json=data))
+            try:
+                await asyncio.wait_for(started.wait(), timeout=5)
+                # Independent connection sees the committed first result while work is pending.
+                async with observer.state.engine.connect() as connection:
+                    rows = (await connection.execute(
+                        text("SELECT source, result FROM transformations "
+                             "WHERE source LIKE :marker"),
+                        {"marker": f"%{marker}%"},
+                    )).all()
+                    assert rows == [(good, good.upper())]
+                    assert await connection.scalar(
+                        text("SELECT count(*) FROM payloads WHERE input_digest = :digest"),
+                        {"digest": identity.input_digest},
+                    ) == 0
+                if interruption == "cancellation":
+                    task.cancel()
+                    with pytest.raises(asyncio.CancelledError):
+                        await asyncio.wait_for(task, timeout=5)
+                else:
+                    if interruption == "failure":
+                        release.set()
+                    response = await asyncio.wait_for(task, timeout=5)
+                    assert response.status_code == (502 if interruption == "failure" else 504)
+                    assert response.json() == {
+                        "detail": "Transformation failed" if interruption == "failure"
+                        else "Request timed out"
+                    }
+            finally:
+                release.set()
+                if not task.done():
+                    task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+    assert calls == [good, bad]
+    async with observer.state.engine.connect() as connection:
+        assert (await connection.execute(
+            text("SELECT source, result FROM transformations WHERE source LIKE :marker"),
+            {"marker": f"%{marker}%"},
+        )).all() == [(good, good.upper())]
+        assert await connection.scalar(
+            text("SELECT count(*) FROM payloads WHERE input_digest = :digest"),
+            {"digest": identity.input_digest},
+        ) == 0
+
+    async def recovered(source):
+        calls.append(source)
+        return source.upper()
+
+    restarted = create_app(settings, transformer=recovered)
+    async with restarted.router.lifespan_context(restarted):
+        async with AsyncClient(transport=ASGITransport(app=restarted), base_url="http://test") as c:
+            response = await c.post("/payloads", json=data)
+            assert response.status_code == 200
+            identifier = response.json()["id"]
+            assert (await c.get(f"/payloads/{identifier}")).json() == {
+                "output": f"{good.upper()}, {later.upper()}, {bad.upper()}, {good.upper()}"
+            }
+            assert (await c.post("/payloads", json=data)).json() == {"id": identifier}
+    assert calls == [good, bad, bad, later]
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("failure_point", ["after_insert", "before_commit"])
+async def test_publication_rollback_preserves_cache_and_retry_avoids_transform(
+    payload_app, failure_point
+):
+    app, marker = payload_app
+    data = {"list1": [f"first {marker}"], "list2": [f"second {marker}"]}
+    identity = payload_identity(**data)
+    calls, attempted_ids = [], []
+
+    async def transform(source):
+        calls.append(source)
+        return source.upper()
+
+    application = create_app(
+        Settings(database_url=os.environ["TEST_DATABASE_URL"]), transformer=transform
+    )
+
+    def after_insert(connection, cursor, statement, parameters, context, executemany):
+        if statement.startswith("INSERT INTO payloads"):
+            attempted_ids.append(context.compiled_parameters[0]["id"])
+            if failure_point == "after_insert":
+                raise OSError("Injected publication failure")
+            connection.info["fail_payload_commit"] = True
+
+    def before_commit(connection):
+        if connection.info.pop("fail_payload_commit", False):
+            raise OSError("Injected publication commit failure")
+
+    async with application.router.lifespan_context(application):
+        engine = application.state.engine.sync_engine
+        event.listen(engine, "after_cursor_execute", after_insert)
+        event.listen(engine, "commit", before_commit)
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=application), base_url="http://test"
+            ) as client:
+                response = await client.post("/payloads", json=data)
+                assert response.status_code == 503
+                assert response.json() == {"detail": "Database unavailable"}
+                assert response.headers["Retry-After"] == "1"
+        finally:
+            event.remove(engine, "after_cursor_execute", after_insert)
+            event.remove(engine, "commit", before_commit)
+    assert len(attempted_ids) == 1
+    async with app.state.engine.connect() as connection:
+        assert await connection.scalar(
+            text("SELECT count(*) FROM payloads WHERE input_digest = :digest"),
+            {"digest": identity.input_digest},
+        ) == 0
+        assert dict((await connection.execute(
+            text("SELECT source, result FROM transformations WHERE source LIKE :marker"),
+            {"marker": f"%{marker}%"},
+        )).all()) == {source: source.upper() for source in calls}
+    assert calls == [*data["list1"], *data["list2"]]
+
+    async def unexpected(source):
+        pytest.fail("Publication retry must reuse committed transformations")
+
+    restarted = create_app(
+        Settings(database_url=os.environ["TEST_DATABASE_URL"]), transformer=unexpected
+    )
+    async with restarted.router.lifespan_context(restarted):
+        async with AsyncClient(transport=ASGITransport(app=restarted), base_url="http://test") as c:
+            assert (await c.get(f"/payloads/{attempted_ids[0]}")).status_code == 404
+            response = await c.post("/payloads", json=data)
+            assert response.status_code == 200
+            identifier = response.json()["id"]
+            assert (await c.get(f"/payloads/{identifier}")).json() == {
+                "output": f"FIRST {marker.upper()}, SECOND {marker.upper()}"
+            }
+            assert (await c.post("/payloads", json=data)).json() == {"id": identifier}
 
 
 @pytest.mark.integration
