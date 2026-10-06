@@ -14,6 +14,16 @@ def test_database_configuration_is_required(monkeypatch):
         Settings(_env_file=None)
 
 
+def test_database_credentials_are_masked():
+    password = "sentinel-private-password"
+    settings = Settings(database_url=f"postgresql+asyncpg://cache:{password}@localhost/cache")
+    assert password not in repr(settings)
+    assert password not in settings.model_dump_json()
+    with pytest.raises(ValidationError) as error:
+        Settings(database_url=f"invalid://cache:{password}@localhost/cache")
+    assert password not in str(error.value)
+
+
 def test_liveness_does_not_require_database():
     settings = Settings(database_url="postgresql+asyncpg://cache:cache@127.0.0.1:1/cache")
     with TestClient(create_app(settings)) as client:

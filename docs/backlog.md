@@ -74,7 +74,7 @@ Dependencies identify the required predecessor, rather than requiring every earl
 | B18 | Clean Docker build and migration/start smoke test; storage reuse after restart; document supported worker/connection budget | Waiting | B03, B12, B17 | Compose exists; runtime deployment evidence pending |
 | B19 | Complete public setup, usage, configuration, architecture and limitations; reconcile every guarantee with tests | Waiting | B14, B17, B18 | Public docs exist; final usage and evidence pending |
 | B20 | Final code review and requirement audit; full required suite passes; remove unnecessary complexity and inspect repository contents | Waiting | B13, B14, B17–B19 | Final review pending |
-| B21 | Preserve real incremental commits; verify neutral repository name and public artifacts contain no personal preparation or secrets | Ready | Ongoing; final audit B20 | Four commits recorded below; private preparation is outside repository |
+| B21 | Preserve real incremental commits; verify neutral repository name and public artifacts contain no personal preparation or secrets | Ready | Ongoing; final audit B20 | Development commits recorded below; private preparation is outside repository; credential configuration hardened and personal notes updated |
 | B22 | Prepare and record English walkthrough with camera and screen, code trace, CLI and tests; verify duration at most 15 minutes | Waiting | B20 | Personal rehearsal remains in sibling private workspace; candidate records video |
 | B23 | Track actual time from available records; candidate reconciles previous work; report honest total without estimating missing history as fact | Ready | Ongoing | No authoritative total yet; candidate confirmation required |
 | B24 | Create/publish neutral public repository and video, verify both links, draft reply with actual hours, submit when explicitly authorized | Waiting | B20–B23 | No public repository, video or submission yet |
@@ -120,3 +120,10 @@ The sandbox-only health test stalled and was interrupted; the approved rerun pas
 B03 runtime verification is complete. Next refine B04–B06, then implement the payload flow and proceed through cache coordination, CLI and deployment evidence.
 
 Submission is ready only when mandatory behavior, documented reliability guarantees, reproducible setup, and final checks pass; repository history is retained; private material is excluded; video meets the brief; and actual hours are reconciled. B24 remains separate from implementation completion because publishing and sending are delivery actions.
+
+
+## Secrets and configuration follow-up
+
+Removed the fixed development password from Compose, examples, and usage commands. Compose now requires CACHE_DATABASE_PASSWORD; scripts/configure_local.py generates ignored local configuration with mode 0600 and refuses overwrites. The validated database URL is stored as SecretStr and only unwrapped at database connection boundaries. A regression test checks representation, JSON serialization, and formatted validation errors. The previously public development password remains in Git history and must be considered compromised; the local database role was rotated without deleting its volume. Expanded Compose configuration must not be used as public evidence. Personal foundation notes and working agreement updated.
+
+Follow-up verification: Ruff passed; all four foundation tests passed against the rotated PostgreSQL role; Docker rebuild and migration/startup passed with the preserved volume; readiness returned HTTP 200. `docker compose --env-file /dev/null config --quiet` correctly rejected a missing password. `.env` is ignored by Git and has mode 0600.

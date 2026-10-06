@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_DB: cache
       POSTGRES_USER: cache
-      POSTGRES_PASSWORD: local-development-only
+      POSTGRES_PASSWORD: ${CACHE_DATABASE_PASSWORD:?Set CACHE_DATABASE_PASSWORD in .env}
     ports:
       - "127.0.0.1:${CACHE_DATABASE_PORT:-5432}:5432"
     volumes:
@@ -17,7 +17,7 @@ services:
   migrate:
     build: .
     environment: &service-environment
-      CACHE_DATABASE_URL: postgresql+asyncpg://cache:local-development-only@database:5432/cache
+      CACHE_DATABASE_URL: postgresql+asyncpg://cache:${CACHE_DATABASE_PASSWORD:?Set CACHE_DATABASE_PASSWORD in .env}@database:5432/cache
     command: ["alembic", "upgrade", "head"]
     depends_on:
       database:

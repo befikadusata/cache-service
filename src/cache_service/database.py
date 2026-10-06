@@ -5,7 +5,7 @@ from cache_service.config import Settings
 
 def create_engine(settings: Settings) -> AsyncEngine:
     return create_async_engine(
-        str(settings.database_url),
+        settings.database_url.get_secret_value(),
         pool_size=settings.pool_size,
         max_overflow=0,
         pool_timeout=settings.pool_timeout_seconds,
