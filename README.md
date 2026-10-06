@@ -18,6 +18,7 @@ The task author delegated the payload identity and storage choices to us and ask
 
 - [Implementation and submission backlog](docs/backlog.md)
 - [Requirements and acceptance criteria](docs/requirements.md)
+- [Payload API contract](docs/api-contract.md)
 - [Architecture decisions](docs/architecture.md)
 - [Implementation plan](docs/implementation-plan.md)
 - [Verification strategy](docs/verification.md)

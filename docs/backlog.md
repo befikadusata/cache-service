@@ -57,7 +57,7 @@ Dependencies identify the required predecessor, rather than requiring every earl
 | B01 | Record author response, identity/storage choices and transformer assumption; resolve CLI flag conflict and output format | Ready | None | Author delegated identity/storage; [README assumptions](../README.md#assessment-assumptions) recorded; uppercase assumption and help alias documented; CLI output format pending |
 | B02 | Application lifecycle, PostgreSQL configuration, migration and Compose; inspect setup artifacts | Done | None | [Application](../src/cache_service/main.py), [migration](../migrations/versions/0001_initial.py), [Compose](../compose.yaml); commit `6a492e7` |
 | B03 | Install dependencies, generate lockfile, run lint and foundation tests, apply clean migration, check both health endpoints and image startup | Done | B02; execution/network access | Runtime checks passed on 2026-10-06; `uv.lock` generated; PostgreSQL host port 55432; see verification record below; personal notes updated |
-| B04 | Freeze POST and GET response schemas, strict input validation, empty behavior, configurable limits and request deadlines | Ready | Selected B01 assumptions | POST identifier field and status, malformed ID behavior, bounds and deadlines still to specify |
+| B04 | Freeze POST and GET response schemas, strict input validation, empty behavior, configurable limits and request deadlines | Done | Selected B01 assumptions | [Contract](api-contract.md), [models](../src/cache_service/schemas.py), [settings](../src/cache_service/config.py), [tests](../tests/test_schemas.py); 18 focused tests and Ruff passed; personal notes updated; commit titled `Define payload API contract and validation`. Endpoint enforcement remains B07/B11 |
 | B05 | Define canonical encoding, version and digest identities; verify list boundaries, order, whitespace and collision handling | Ready | B04 | Design in [architecture](architecture.md); implementation pending |
 | B06 | Replaceable uppercase transformer and alternating composition; meaningful isolated tests | Ready | B04 | Sample output and empty input policy in requirements |
 | B07 | Create and read complete payloads; generated UUID plus unique input digest; duplicate creation returns stored ID | Waiting | B03–B06 | Initial schema written; request flow pending |
@@ -118,7 +118,7 @@ The sandbox-only health test stalled and was interrupted; the approved rerun pas
 
 ## Next work and completion gate
 
-B03 runtime verification is complete. Next refine B04–B06, then implement the payload flow and proceed through cache coordination, CLI and deployment evidence.
+B03 runtime verification is complete. B04 contract and model checks are complete. Next implement B05–B06, then the payload flow and proceed through cache coordination, CLI and deployment evidence.
 
 Submission is ready only when mandatory behavior, documented reliability guarantees, reproducible setup, and final checks pass; repository history is retained; private material is excluded; video meets the brief; and actual hours are reconciled. B24 remains separate from implementation completion because publishing and sending are delivery actions.
 
@@ -153,3 +153,7 @@ Verification on 2026-10-06:
 | Actual GitHub Actions execution | Pending first remote push or pull request; no hosted success claimed |
 
 The initial sandbox action-tag lookup failed DNS resolution; approved execution resolved it. uv cache access also required approved execution. Tests retain one upstream Starlette TestClient deprecation warning. Private workflow explanation and troubleshooting notes updated. B25 remains Written until a hosted run passes; there is no dependency-resolution blocker.
+
+## B04 acceptance evidence
+
+On 2026-10-06, `.venv/bin/pytest tests/test_schemas.py -q` passed all 18 tests; `.venv/bin/ruff check .` and `git diff --check` passed. Contract, strict request models, response serialization, configurable limits and finite positive deadline settings are verified. Personal notes updated. HTTP endpoint wiring and runtime deadline enforcement are pending B07/B11; no payload runtime evidence is claimed. Recorded in the commit titled `Define payload API contract and validation` on `feat/payload-contract`.

@@ -24,3 +24,8 @@ class Settings(BaseSettings):
     pool_timeout_seconds: float = Field(default=5, gt=0)
     database_connect_timeout_seconds: float = Field(default=5, gt=0)
     database_statement_timeout_seconds: float = Field(default=5, gt=0)
+    max_list_items: int = Field(default=100, ge=1)
+    max_string_characters: int = Field(default=10000, ge=1)
+    max_total_characters: int = Field(default=100000, ge=1)
+    generation_timeout_seconds: float = Field(default=60, gt=0, allow_inf_nan=False)
+    read_timeout_seconds: float = Field(default=10, gt=0, allow_inf_nan=False)
