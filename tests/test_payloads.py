@@ -99,16 +99,10 @@ async def test_empty_and_unknown_payload(payload_app):
 @pytest.mark.integration
 async def test_concurrent_publication_returns_authoritative_id(payload_app):
     app, marker = payload_app
-    arrived = 0
-    both_started = asyncio.Event()
+    calls = []
 
     async def transform(source):
-        nonlocal arrived
-        if source == marker:
-            arrived += 1
-            if arrived == 2:
-                both_started.set()
-            await asyncio.wait_for(both_started.wait(), timeout=5)
+        calls.append(source)
         return source.upper()
 
     application = create_app(
@@ -122,6 +116,7 @@ async def test_concurrent_publication_returns_authoritative_id(payload_app):
             responses = await asyncio.gather(*(c.post("/payloads", json=data) for _ in range(2)))
             assert [response.status_code for response in responses] == [200, 200]
             assert responses[0].json() == responses[1].json()
+            assert calls.count(marker) == 1
     async with app.state.engine.connect() as connection:
         assert (
             await connection.scalar(

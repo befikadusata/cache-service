@@ -39,9 +39,15 @@ and duplicates from the result mapping before composing and publishing the paylo
 Successful transformations survive a later failure, timeout or cancellation. Failed operations
 are not inserted as results. Empty input avoids cache access. Request-local digest collisions
 are rejected before database lookup. The existing `0001` schema supports this flow unchanged.
-This implements steps 1–3, uncoordinated 7–8, and 10 below. Advisory coordination and bounded
-cleanup remain B10–B14; concurrent misses can repeat external work while conflict readback
-keeps stored results authoritative and payload uniqueness produces one stored ID.
+B10 adds one session advisory lock per missing string. The acquisition transaction commits,
+then a new short transaction rechecks and verifies the cache. If still missing, transformation
+runs without an open transaction while retaining the connection. Persistence and authoritative
+readback use that same connection and commit before explicit unlock. Each connection returns
+before the next string begins. On any exception, including acquisition uncertainty or failed
+unlock, invalidate the connection rather than returning possible session ownership to the pool.
+The current acquisition uses the ordinary statement timeout. Separate wait/admission budgets,
+bounded cancellation-protected cleanup and forced connection-loss evidence remain B11–B14.
+Healthy concurrent sessions now serialize shared misses and reuse committed results.
 Configured overall deadlines and generic error responses are wired; coordinated cleanup and
 capacity guarantees remain future work. PostgreSQL text storage does not support every possible
 Python string, including NUL and lone surrogate values; such storage failures return a generic

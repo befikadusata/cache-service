@@ -23,8 +23,8 @@ The response is `{"id":"<uuid>"}`. Read it with
 `curl -sS http://localhost:8000/payloads/<uuid>` to obtain
 `{"output":"HELLO, ONE, WORLD, TWO"}`. Repeating identical ordered input under the same
 transformer version returns the stored identifier, including after application restart.
-Concurrent publication also returns the stored winner's identifier; concurrent misses can
-still repeat transformation until coordination is implemented.
+Concurrent publication also returns the stored winner's identifier. Session advisory locks
+coordinate missing transformations across cooperating database sessions.
 
 Both lists must contain strings and have equal lengths. Two empty lists produce an empty
 output. Unknown UUIDs return 404, and invalid input returns 422. Configurable input limits,
@@ -33,8 +33,11 @@ Only complete outputs are published. Successful individual transformations are c
 their exact source and transformer version, including after restart. Strings shared by different
 payloads reuse those results, and duplicates within a request are transformed once. Successful
 results survive a later transformer failure so retries only transform remaining misses. Cache
-reads are batched; conflicting inserts use verified authoritative readback. Concurrent misses
-can still repeat calls until advisory coordination is implemented in B10.
+reads are batched; conflicting inserts use verified authoritative readback. Each missing string
+holds one session advisory lock, rechecks the cache after acquisition, and commits on that same
+connection before unlock. No transaction spans transformation. Initial concurrent-session tests
+pass; bounded admission, protected cleanup and multi-process evidence remain B11–B14 work.
+Crashes or connection loss can still cause repeated external calls.
 
 ## Assessment assumptions
 
@@ -90,7 +93,7 @@ uv run alembic upgrade head
 uv run uvicorn cache_service.main:create_app --factory
 ```
 
-The application builds its connection URL from `DB_HOST` (default `127.0.0.1`), `DB_PORT` (5432), `DB_USER` (`cache`), `DB_NAME` (`cache`), and required `DB_PASS`. Credentials are URL-escaped and masked in diagnostics. An optional nonempty `DATABASE_URL` overrides these connection values, preserving existing local configurations; omit it when using separate `DB_*` settings. Compose supplies separate settings and does not forward that local override. Initial pool capacity is ten connections per process, with no overflow; connection checkout, connection establishment, and ordinary database statements each have a five-second budget. These are configurable starting values, not performance claims. Lock coordination will explicitly override the statement budget for lock acquisition in its short transaction.
+The application builds its connection URL from `DB_HOST` (default `127.0.0.1`), `DB_PORT` (5432), `DB_USER` (`cache`), `DB_NAME` (`cache`), and required `DB_PASS`. Credentials are URL-escaped and masked in diagnostics. An optional nonempty `DATABASE_URL` overrides these connection values, preserving existing local configurations; omit it when using separate `DB_*` settings. Compose supplies separate settings and does not forward that local override. Initial pool capacity is ten connections per process, with no overflow; connection checkout, connection establishment, and ordinary database statements each have a five-second budget. These are configurable starting values, not performance claims. Advisory acquisition currently uses the ordinary statement budget; B11 will add separate lock waiting and admission budgets.
 
 ## Verification
 
