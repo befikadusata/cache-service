@@ -36,6 +36,13 @@ Use controlled synchronization so requests actually overlap before a result is c
 
 The selected deployment supports multiple workers: include a test across separate processes sharing PostgreSQL. A single-process test cannot establish that guarantee. Test restart separately from concurrent execution and state the remaining crash window.
 
+`tests/test_multiprocess.py` exercises identical and overlapping requests in separate spawned
+application processes. IPC reports transformer calls; an event pauses the first shared call
+until PostgreSQL reports a real waiter on its advisory key. A fresh process then verifies
+payload ID reuse and a new input composed from persisted strings without transformer calls.
+The requests use in-process HTTP transport within each child; networked deployment evidence
+is tracked separately in B18.
+
 ## Demonstration
 
 Show the first request producing transformations, an identical request reusing the payload identifier, a different request reusing strings, and overlapping requests sharing missing work. Expose call counts through test instrumentation or a demonstration harness without adding an unnecessary public API.
