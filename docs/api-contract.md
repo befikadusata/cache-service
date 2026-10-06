@@ -1,7 +1,8 @@
 # Payload API contract (B04)
 
-These are frozen implementation contracts. Payload routes are not available until B07;
-coordination and deadline failure evidence follows in B11–B13.
+Payload routes are implemented in B07, including configured input validation and overall
+POST/GET deadlines. Per-string caching and coordination remain B09–B14; their capacity,
+cleanup, and operational failure evidence follows in those work items.
 
 `POST /payloads` accepts a JSON object containing exactly `list1` and `list2`.
 Both must be arrays of strings of equal length. Missing fields, extra fields,
@@ -32,8 +33,8 @@ transformer version change.
 
 Limits must be positive integers; deadlines must be positive finite numbers.
 `PayloadCreate.model_validate(data, context={"settings": settings})` applies the
-configured limits; without context it uses defaults. B07 must pass app settings
-when validating requests. These are initial safety budgets, subject to integration
+configured limits; without context it uses defaults. POST validation passes app settings,
+including when configured limits exceed defaults. These are initial safety budgets, subject to integration
 measurements. Character limits do not bound raw HTTP bytes, JSON whitespace or
 uppercase expansion. Transport/body-read limits are outside this contract.
 

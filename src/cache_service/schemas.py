@@ -1,4 +1,4 @@
-"""Payload wire models; endpoints are implemented in B07."""
+"""Payload wire models and configurable strict input validation."""
 
 from uuid import UUID
 
