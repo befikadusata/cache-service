@@ -63,8 +63,8 @@ Dependencies identify the required predecessor, rather than requiring every earl
 | B07 | Create and read complete payloads; generated UUID plus unique input digest; duplicate creation returns stored ID | Done | B03–B06 | [Payload flow](../src/cache_service/payloads.py), [routes](../src/cache_service/main.py), [tests](../tests/test_payloads.py); 80 tests and Ruff passed, including real PostgreSQL publication races and restart reuse; personal notes updated; commit titled `feat: add payload creation and retrieval` on `feat/b07-payload-endpoints` |
 | B08 | API tests for sample output, invalid types/lengths, empty input, unknown ID, retry and identity policy | Done | B07 | [Payload tests](../tests/test_payloads.py); API coverage reviewed against the contract; 103 tests and Ruff passed, including real PostgreSQL identity/version and retry checks; see B08 acceptance evidence; commit titled `test: complete B08 payload API coverage` on `feat/b08-api-coverage` |
 | B09 | Batch cache reads and request deduplication; persist successful results with versioned keys and authoritative readback | Done | B03, B05, B06 | [Cache flow](../src/cache_service/cache.py), [payload integration](../src/cache_service/payloads.py), [cache tests](../tests/test_cache.py); 116 full-suite tests and Ruff passed against PostgreSQL; personal notes updated; commit titled `feat: add persistent transformation caching` on `feat/b09-transformation-cache` |
-| B10 | One advisory lock at a time, recheck after acquire, same connection for writes; no transaction over external call | Ready | B09 | B09 complete; coordination design recorded; implementation pending |
-| B11 | Bounded admission and waits, cancellation-safe cleanup, invalidate uncertain ownership; map operational failures to documented HTTP responses | Waiting | B10, B04 | Numeric budgets and cleanup code pending |
+| B10 | One advisory lock at a time, recheck after acquire, same connection for writes; no transaction over external call | Done | B09 | [Cache coordination](../src/cache_service/cache.py), [tests](../tests/test_cache.py); 120 full-suite tests and Ruff passed against PostgreSQL; see B10 evidence below; personal notes updated; commit titled `feat: coordinate transformation misses with advisory locks` on `feat/b10-advisory-coordination` |
+| B11 | Bounded admission and waits, cancellation-safe cleanup, invalidate uncertain ownership; map operational failures to documented HTTP responses | Ready | B10, B04 | B10 complete; basic failure invalidation exists; separate budgets, protected cleanup and operational mapping pending |
 | B12 | Preserve successful transformations on later failure; publish complete payload atomically; verify safe retries | Waiting | B07, B09–B11 | Policy recorded; implementation pending |
 | B13 | Real PostgreSQL tests for timeout, cancellation, saturation, lock loss, collisions, version changes and no open transaction during transform | Waiting | B11, B12 | Controlled synchronization and exact assertions pending |
 | B14 | Multi-process identical and overlapping requests; call counts per distinct string, consistent IDs and restart reuse | Waiting | B12 | Test instrumentation pending; single-process evidence insufficient |
@@ -118,7 +118,7 @@ The sandbox-only health test stalled and was interrupted; the approved rerun pas
 
 ## Next work and completion gate
 
-B03 runtime verification, B04 contract and model checks, B05 identity helpers, and B06 transformation and composition are complete. B07 payload creation and retrieval and B08 API coverage review are also complete. B09 persistent transformation caching is complete. Next implement B10 advisory coordination, then proceed through bounded cleanup, CLI and deployment evidence. B10 prerequisites are complete.
+B03 runtime verification, B04 contract and model checks, B05 identity helpers, and B06 transformation and composition are complete. B07 payload creation and retrieval and B08 API coverage review are also complete. B09 persistent transformation caching is complete. B10 advisory coordination is also complete. Next implement B11 bounded admission, waits and protected cleanup, then proceed through failure/concurrency evidence, CLI and deployment. B11 prerequisites are complete.
 
 Submission is ready only when mandatory behavior, documented reliability guarantees, reproducible setup, and final checks pass; repository history is retained; private material is excluded; video meets the brief; and actual hours are reconciled. B24 remains separate from implementation completion because publishing and sending are delivery actions.
 
@@ -263,3 +263,25 @@ scope. Personal cache walkthrough, design alternatives, payload trace and conven
 preference were updated outside Git. Concurrent misses can still repeat transformer calls;
 advisory ownership and multi-process minimized-call guarantees remain B10–B14. B12 retains
 coordinated retry and atomic-publication evidence as its completion gate.
+
+## B10 acceptance evidence
+
+Verification on 2026-10-06:
+
+- Full `.venv/bin/pytest -q -x`, with `TEST_DATABASE_URL` loaded from masked local settings:
+  **120 passed**, including real PostgreSQL integration; one existing TestClient deprecation warning.
+- `.venv/bin/ruff check .` and `git diff --check`: passed.
+- Two independent engines overlap on a missing string. The test observes an actual ungranted
+  PostgreSQL advisory lock before releasing the holder, then verifies one shared transformer
+  call, cache recheck reuse and successful overlapping work.
+- PostgreSQL reports the holder `idle` with no transaction during transformation. SQL event
+  instrumentation proves lock acquisition and persistence use the same connection. Explicit
+  unlock permits another session to acquire immediately after success.
+- Failure, transformer timeout and cancellation discard the session and permit a retry;
+  existing collision/readback, partial-success and concurrent payload identifier checks pass.
+- Initial sandbox database execution failed because sockets were denied; approved execution
+  passed. Private cache walkthrough and working agreement updated outside Git.
+
+Lock acquisition currently uses the ordinary statement timeout. Separate budgets, admission,
+bounded cancellation-protected cleanup, forced ownership-loss tests and multiple-process
+call-count evidence remain B11–B14. No schema migration or dependency change was needed.

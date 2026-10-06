@@ -83,7 +83,7 @@ async def test_database_connection_timeout_is_distinct_from_transformer_timeout(
 
 
 @pytest.mark.integration
-async def test_deduplication_batch_reads_and_no_connection_during_transform(cache_database):
+async def test_deduplication_batch_reads_and_no_transaction_during_transform(cache_database):
     engine, version = cache_database
     await insert_result(engine, "cached", version, "STORED")
     statements, calls = [], []
@@ -94,7 +94,7 @@ async def test_deduplication_batch_reads_and_no_connection_during_transform(cach
     event.listen(engine.sync_engine, "before_cursor_execute", record)
 
     async def transform(source):
-        assert engine.pool.checkedout() == 0
+        assert engine.pool.checkedout() == 1
         calls.append(source)
         return source.upper()
 
@@ -292,3 +292,109 @@ async def test_conflicting_insert_returns_authoritative_stored_result(cache_data
         return "LOSER"
 
     assert await cached_transformations(engine, ["a", "a"], transform, version) == {"a": "WINNER"}
+
+
+@pytest.mark.integration
+async def test_concurrent_miss_waits_then_rechecks_on_same_session(cache_database):
+    engine, version = cache_database
+    competitor = create_engine(Settings(database_url=os.environ["TEST_DATABASE_URL"]))
+    started, release = asyncio.Event(), asyncio.Event()
+    calls, lock_connections, write_connections = [], [], []
+    key = transformation_identity("shared", version=version).advisory_key
+
+    def record(connection, cursor, statement, parameters, context, executemany):
+        if "SELECT pg_advisory_lock(" in statement:
+            lock_connections.append(connection)
+        if "INSERT INTO transformations" in statement:
+            write_connections.append(connection)
+
+    async def transform(source):
+        calls.append(source)
+        assert not lock_connections[0].in_transaction()
+        started.set()
+        await release.wait()
+        return source.upper()
+
+    async def wait_for_database_waiter():
+        async with competitor.connect() as observer:
+            async with observer.begin():
+                holders = (
+                    await observer.execute(
+                        text(
+                            "SELECT activity.state, activity.xact_start FROM pg_locks locks "
+                            "JOIN pg_stat_activity activity ON activity.pid = locks.pid "
+                            "WHERE locks.locktype = 'advisory' AND locks.classid::bigint = :high "
+                            "AND locks.objid::bigint = :low AND locks.objsubid = 1 "
+                            "AND locks.granted"
+                        ),
+                        {"high": (key & ((1 << 64) - 1)) >> 32, "low": key & ((1 << 32) - 1)},
+                    )
+                ).all()
+                assert holders == [("idle", None)]
+            while True:
+                async with observer.begin():
+                    waiting = await observer.scalar(
+                        text(
+                            "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' "
+                            "AND classid::bigint = :high AND objid::bigint = :low "
+                            "AND objsubid = 1 AND NOT granted"
+                        ),
+                        {"high": (key & ((1 << 64) - 1)) >> 32, "low": key & ((1 << 32) - 1)},
+                    )
+                if waiting:
+                    return
+                await asyncio.sleep(0.01)
+
+    event.listen(engine.sync_engine, "before_cursor_execute", record)
+    first = second = None
+    try:
+        first = asyncio.create_task(cached_transformations(engine, ["shared"], transform, version))
+        await asyncio.wait_for(started.wait(), timeout=5)
+        second = asyncio.create_task(
+            cached_transformations(competitor, ["shared", "other"], transform, version)
+        )
+        await asyncio.wait_for(wait_for_database_waiter(), timeout=5)
+        assert calls == ["shared"]
+        release.set()
+        assert await asyncio.wait_for(first, timeout=5) == {"shared": "SHARED"}
+        assert await asyncio.wait_for(second, timeout=5) == {"shared": "SHARED", "other": "OTHER"}
+        assert calls == ["shared", "other"]
+        assert write_connections == lock_connections
+        # Explicit unlock permits a different session to acquire the same key immediately.
+        async with competitor.begin() as connection:
+            assert await connection.scalar(text("SELECT pg_try_advisory_lock(:key)"), {"key": key})
+            assert await connection.scalar(text("SELECT pg_advisory_unlock(:key)"), {"key": key})
+    finally:
+        release.set()
+        for task in (first, second):
+            if task is not None:
+                if not task.done():
+                    task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+        event.remove(engine.sync_engine, "before_cursor_execute", record)
+        await competitor.dispose()
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [(ValueError, TransformationFailed), (TimeoutError, TimeoutError),
+     (asyncio.CancelledError, asyncio.CancelledError)],
+)
+async def test_failed_holder_discards_session_and_next_request_can_acquire(
+    cache_database, error, expected
+):
+    engine, version = cache_database
+
+    async def failing(source):
+        raise error()
+
+    with pytest.raises(expected):
+        await cached_transformations(engine, ["retry"], failing, version)
+
+    async def recovered(source):
+        return "RECOVERED"
+
+    assert await asyncio.wait_for(
+        cached_transformations(engine, ["retry"], recovered, version), timeout=5
+    ) == {"retry": "RECOVERED"}
