@@ -48,6 +48,27 @@ The task author delegated the payload identity and storage choices to us and ask
 - **Payload storage:** complete generated payloads are stored in PostgreSQL and retrieved by identifier. No filesystem payload files are created. Keeping payloads and reusable transformations in one durable database simplifies atomic publication and multi-worker access.
 - **Transformer:** deterministic uppercase conversion follows the sample. This remains our implementation assumption rather than an explicitly confirmed transformation contract.
 
+## Planned CLI policy
+
+The CLI remains unimplemented (B15–B17). It will use `--host` for the server address,
+reserve `-h`/`--help` for help, and require a positive repeat count and exactly one input
+source: inline JSON or a file, with `-` representing stdin.
+
+Each successful repeat will create or reuse a payload, read it, and write one compact JSON
+object containing `id` and `output`, followed by a newline. This JSON Lines format applies
+to both stdout (the default) and output files, including a single repeat:
+
+```json
+{"id":"550e8400-e29b-41d4-a716-446655440000","output":"HELLO, ONE, WORLD, TWO"}
+```
+
+JSON encoding escapes embedded newlines in strings, so each result occupies one physical
+line. Repeated requests emit one record per successful iteration, even when the ID is reused.
+The CLI will write each record as the iteration finishes. Diagnostics go to stderr; a failed
+iteration stops the loop with a nonzero exit status and emits no result record for that
+iteration. Earlier complete records remain available. JSON Lines preserves the ID and exact
+output while allowing incremental consumption without buffering a single JSON array.
+
 ## Engineering documentation
 
 - [Implementation and submission backlog](docs/backlog.md)

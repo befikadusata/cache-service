@@ -34,6 +34,11 @@ Exit evidence: sequential and multi-process call-count tests prove coordination 
 
 Use Pydantic Settings for argument parsing and validation. Implement input sources, repeats, host selection, output destinations, and clear failures. Verify clean stdout, diagnostic stderr, and nonzero failure exit status. Address the short-option conflict in user documentation.
 
+The B01 output policy is JSON Lines: emit a compact `id`/`output` object and newline after
+each successful create/read iteration to stdout or a file. Stop on failure with a nonzero exit
+status, preserving earlier complete records. Verify repeated IDs, embedded newline escaping,
+and failure after a successful iteration. See the [planned CLI policy](../README.md#planned-cli-policy).
+
 Exit evidence: automated tests exercise parsing and malformed input; an integration scenario creates and reads a payload through the real service.
 
 ## Stage 6 Deployment and persistence

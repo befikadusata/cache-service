@@ -37,7 +37,11 @@ See the [README assumptions](../README.md#assessment-assumptions) for rationale.
 - Reserve the conflicting short option -h for help; use --host for the server address.
 - Require exactly one input source: inline JSON or file input, with stdin represented by a dash.
 - Require a positive repeat count. Each iteration creates or reuses a payload and reads its output.
-- Default output to stdout and send diagnostics to stderr. Decide the repeated-output format before CLI implementation.
+- Default output to stdout and send diagnostics to stderr. Use JSON Lines for stdout and files:
+  one compact object containing `id` and `output`, followed by a newline, per successful repeat.
+  Escape embedded newlines through JSON encoding. Emit each record after creation and read
+  succeed, including when an ID is reused. On failure, stop with a nonzero exit status and no
+  result record for the failed iteration; retain earlier complete records.
 - The [payload API contract](api-contract.md) freezes schemas, HTTP statuses, configurable input limits and overall deadlines. Routes and runtime enforcement follow in B07/B11; coordination capacity remains B11 work.
 
 ## Additional reliability goals
