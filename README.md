@@ -112,7 +112,7 @@ against a live Uvicorn API and PostgreSQL; see [CLI evidence](docs/verification.
 - [Implementation plan](docs/implementation-plan.md)
 - [Verification strategy](docs/verification.md)
 
-## Start the foundation
+## Docker startup
 
 From this directory, run:
 
@@ -128,6 +128,27 @@ Compose waits for PostgreSQL, runs migrations, then starts the API. Run the setu
 - Interactive API documentation is at `http://localhost:8000/docs`.
 
 Stop with `docker compose down`. Removing the named volume deletes stored data.
+
+The image starts one Uvicorn worker by default. To run two workers after Compose has
+completed migrations, use:
+
+```sh
+docker compose run --rm --service-ports api uvicorn cache_service.main:create_app \
+  --factory --host 0.0.0.0 --port 8000 --workers 2
+```
+
+Stop any existing API container first (`docker compose stop api`) to free port 8000.
+Two workers allow up to 20 application database connections with the defaults, plus
+migration and administration connections. Each worker admits eight coordination operations;
+choose worker counts within the database's available connection capacity. All workers must
+use the same identity encoding and transformer version and connect directly to PostgreSQL.
+Separate-process coordination is verified by B14; this is not a throughput benchmark.
+
+For an isolated clean build and persistence check, run `python3 scripts/verify_deployment.py`.
+It requires Docker Compose 2.24.4 or newer for port overrides. It creates fresh credentials,
+an automatically assigned localhost API port, and a separate volume, then stops its containers
+while retaining that volume for inspection. See [deployment evidence](docs/verification.md#docker-deployment)
+for the checks and their scope.
 
 ## Command shortcuts
 

@@ -122,7 +122,15 @@ mechanics rather than establish production performance.
 
 ## Deployment and guarantees
 
-Docker Compose will provide the API, PostgreSQL, a database health check, and persistent database storage. Schema migration runs as an explicit deployment step before workers start. All workers share identity encoding and transformer version.
+Docker Compose provides the API, PostgreSQL, a database health check, and persistent database
+storage. The migration service waits for healthy PostgreSQL; the API depends on its successful
+completion. Schema migration runs before workers start. The image runs one Uvicorn worker by
+default; multiple workers use the same factory with `--workers N`. Each worker owns its engine,
+fixed pool and admission semaphore. Budget up to `N × POOL_SIZE` application connections plus
+migration and administration connections; default capacity is ten pooled connections and eight
+coordination slots per worker. All workers share identity encoding and transformer version.
+Separate-process coordination evidence is B14; the isolated Docker startup and persistence
+procedure is described in [verification](verification.md#docker-deployment).
 
 Connect directly to PostgreSQL. Session advisory locks are incompatible with PgBouncer transaction pooling; ordinary SQLAlchemy pooling preserves a checked-out connection's session. See [PgBouncer compatibility](https://www.pgbouncer.org/features.html).
 

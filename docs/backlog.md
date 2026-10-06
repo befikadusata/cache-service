@@ -71,8 +71,8 @@ Dependencies identify the required predecessor, rather than requiring every earl
 | B15 | Pydantic Settings CLI parsing; host, repeat and mutually exclusive input source validation; resolve help alias | Done | B01 output policy; B04 | [Parser](../src/cache_service/cli.py), [tests](../tests/test_cli.py); 24 focused tests, 123 unit tests and Ruff passed; see B15 evidence below; personal notes updated; commit titled `feat: add CLI argument parsing and validation` on `feat/b15-cli-parsing` |
 | B16 | CLI create/read loop, file/stdin/JSON input, file/stdout output, stderr diagnostics and nonzero failure exit | Done | B07, B15 | [Executable](../src/cache_service/cli.py), [execution tests](../tests/test_cli_execution.py), [usage](../README.md#cli-usage); 49 focused CLI tests, 148 unit tests and Ruff passed; see B16 evidence below; personal notes updated; commit titled `Add CLI execution and JSON Lines output` on `feat/b16-cli-execution` |
 | B17 | CLI parsing and I/O tests plus a real-service integration scenario | Done | B16 | [CLI tests](../tests/test_cli_execution.py), [live-service tests](../tests/test_cli_integration.py), [verification](verification.md#cli-evidence); two focused live-service cases and 201 full-suite tests passed against PostgreSQL; Ruff passed; personal notes updated; commit titled `Verify CLI against live API and PostgreSQL` on `feat/b17-cli-verification` |
-| B18 | Clean Docker build and migration/start smoke test; storage reuse after restart; document supported worker/connection budget | Ready | B03, B12, B17 | Prerequisites complete; Compose exists; runtime deployment evidence pending |
-| B19 | Complete public setup, usage, configuration, architecture and limitations; reconcile every guarantee with tests | Waiting | B14, B17, B18 | Public docs exist; final usage and evidence pending |
+| B18 | Clean Docker build and migration/start smoke test; storage reuse after restart; document supported worker/connection budget | Done | B03, B12, B17 | [Deployment smoke script](../scripts/verify_deployment.py), [procedure](verification.md#docker-deployment), worker/connection guidance in README and architecture; all runtime checks and Ruff passed on 2026-10-07; see B18 evidence below; personal notes updated; commit titled `Verify Docker deployment and restart persistence` |
+| B19 | Complete public setup, usage, configuration, architecture and limitations; reconcile every guarantee with tests | Ready | B14, B17, B18 | Prerequisites complete; public docs exist; final reconciliation pending |
 | B20 | Final code review and requirement audit; full required suite passes; remove unnecessary complexity and inspect repository contents | Waiting | B13, B14, B17–B19 | Final review pending |
 | B21 | Preserve real incremental commits; verify neutral repository name and public artifacts contain no personal preparation or secrets | Ready | Ongoing; final audit B20 | Development commits recorded below; private preparation is outside repository; credential configuration hardened and personal notes updated |
 | B22 | Prepare and record English walkthrough with camera and screen, code trace, CLI and tests; verify duration at most 15 minutes | Waiting | B20 | Personal rehearsal remains in sibling private workspace; candidate records video |
@@ -121,9 +121,31 @@ The sandbox-only health test stalled and was interrupted; the approved rerun pas
 B03–B14 are complete, including partial-success preservation, atomic publication, safe retries,
 controlled PostgreSQL failure recovery and separate-process coordination. B01 CLI output
 policy, B15 CLI parsing, B16 CLI execution and B17 live-service verification are complete.
-Next is B18 deployment verification.
+B18 deployment verification is complete. Next is B19 documentation reconciliation.
 
 Submission is ready only when mandatory behavior, documented reliability guarantees, reproducible setup, and final checks pass; repository history is retained; private material is excluded; video meets the brief; and actual hours are reconciled. B24 remains separate from implementation completion because publishing and sending are delivery actions.
+
+## B18 acceptance evidence
+
+Verification on 2026-10-07, with approved Docker execution outside the sandbox:
+
+| Check | Result and scope |
+| --- | --- |
+| `.venv/bin/python scripts/verify_deployment.py`, first attempt | Clean build passed; first readiness request hit a connection reset during startup. Fixed bounded polling to retry connection errors; failed attempt remains recorded here |
+| `.venv/bin/python scripts/verify_deployment.py`, complete rerun | Passed in isolated project `cache-b18-c516b5b4e642`, fresh credentials/storage, no published database port and dynamically assigned localhost API port |
+| No-cache Docker build and Compose startup | Passed; migration service exited 0, stored revision matched Alembic head `0001`, both health endpoints returned 200 |
+| Packaged CLI, HTTP and independent SQL checks | Passed; correct alternating Unicode output, repeated UUID, complete committed payload and three distinct transformation records; overlapping payload succeeded |
+| Container recreation retaining volume | Passed; old UUID readable and reused; a new reordered payload succeeded with transformations disabled; cache snapshot unchanged; uncached input returned 502, proving the restart probe was active |
+| `.venv/bin/ruff check .` and `git diff --check` | Passed |
+
+The smoke check uses one worker and the packaged application code. B14 remains the controlled
+separate-process coordination evidence. README and architecture now describe launching multiple
+workers and budgeting `workers × POOL_SIZE` connections plus migration/administration capacity.
+Docker still resolves dependency ranges, unlike the locked local/CI environment. No application
+behavior or schema changed; no additional pytest run was required for this smoke script and
+documentation. Personal deployment notes updated outside Git. Both attempts stopped their
+containers and retained their isolated volumes; existing deployment storage was untouched.
+Development commit titled `Verify Docker deployment and restart persistence`.
 
 ## B06 acceptance evidence
 

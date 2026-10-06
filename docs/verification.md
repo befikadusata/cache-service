@@ -72,6 +72,38 @@ uv run pytest tests/test_cli_integration.py -q
 The normal integration suite and CI include these tests. This verifies current source over
 real HTTP and PostgreSQL; Docker image startup and restart evidence remain B18 work.
 
+## Docker deployment
+
+Run from the repository root with Docker access and Docker Compose 2.24.4 or newer:
+
+```sh
+python3 scripts/verify_deployment.py
+```
+
+The script creates a unique Compose project, generated credentials and a fresh volume. It
+does not read `.env`, publishes no database port, and assigns an available localhost API port.
+It performs a no-cache image build, checks migration completion and Alembic head, polls
+readiness with a deadline, and verifies both health endpoints. The CLI installed in the image
+creates and reads payloads over HTTP; an independent host HTTP request verifies retrieval.
+Direct database queries verify complete publication and three distinct cached transformations.
+
+After stopping and recreating the database and API containers with the same volume, it checks
+the old UUID and identical-input reuse. A mounted verification-only factory replaces the
+transformer with a rejecting callable under the existing transformer version. A new reordered
+payload must succeed entirely from persisted transformations; uncached input must return 502,
+proving the probe is active. Persisted cache records must match the pre-recreation snapshot.
+Application code still comes from the built image. The probe adds no production endpoint or
+setting. This check runs one worker; B14 supplies controlled separate-process contention and
+call-count evidence. Neither check establishes production throughput or universal exactly-once
+execution across crashes.
+
+Commands have bounded timeouts and failures return nonzero. Captured container diagnostics
+are omitted to avoid exposing credentials. On failure, inspect the named project's containers
+and logs locally, taking care not to share secrets. The script stops its containers in cleanup
+and prints the retained volume name. Existing projects and volumes are untouched; no volume
+is removed automatically. Docker dependency installation still resolves the ranges in
+`pyproject.toml`; local development and CI use `uv.lock`.
+
 ## Demonstration
 
 Show the first request producing transformations, an identical request reusing the payload identifier, a different request reusing strings, and overlapping requests sharing missing work. Expose call counts through test instrumentation or a demonstration harness without adding an unnecessary public API.
