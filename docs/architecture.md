@@ -47,7 +47,7 @@ before the next string begins. On any exception, including acquisition uncertain
 unlock, invalidate the connection rather than returning possible session ownership to the pool.
 B11 uses transaction-local lock and statement timeouts for acquisition, admission below fixed
 pool capacity, an external-operation deadline, and bounded cancellation-protected cleanup.
-Broader forced connection-loss and multi-process evidence remain B13–B14.
+B13 verifies forced backend loss and ownership loss; separate-process evidence remains B14.
 Healthy concurrent sessions now serialize shared misses and reuse committed results.
 Configured overall deadlines and generic error responses are wired; 503 includes Retry-After. PostgreSQL text storage does not support every possible
 Python string, including NUL and lone surrogate values; such storage failures return a generic
@@ -126,7 +126,7 @@ Connect directly to PostgreSQL. Session advisory locks are incompatible with PgB
 
 During healthy concurrent operation, cooperating workers share successful work for the same transformation identity, including overlapping payloads. Failed attempts remain retryable. Reads expose complete payloads only. Restart preserves committed cache results and identifiers.
 
-A crash, lost database connection, timeout with ambiguous external completion, or persistence failure can cause transformation to repeat. If the session connection is lost during an external call, a new owner can begin while the old external work is still running. Do not claim universal exactly-once execution or a maximum of one repeat. Durable claims improve recovery but do not close the external completion gap without external-service idempotency.
+A crash, lost database connection, timeout with ambiguous external completion, or persistence failure can cause transformation to repeat. If the session connection is lost during an external call, a new owner can begin while the old external work is still running. B13 verifies this window by terminating the holder's PostgreSQL backend while its transformer is paused: another application completes the same input, while the original request fails with 503 and cannot replace the committed result. Do not claim universal exactly-once execution or a maximum of one repeat. Durable claims improve recovery but do not close the external completion gap without external-service idempotency.
 
 ## Required evidence
 

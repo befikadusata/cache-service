@@ -5,14 +5,14 @@ from uuid import uuid4
 import pytest
 from httpx import ASGITransport, AsyncClient
 from pydantic import ValidationError
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from cache_service.cache import cached_transformations
 from cache_service.config import Settings
 from cache_service.coordination import Coordination, DatabaseUnavailable
 from cache_service.database import create_engine
-from cache_service.identity import transformation_identity
+from cache_service.identity import TransformationIdentity, transformation_identity
 from cache_service.main import create_app
 
 
@@ -64,7 +64,7 @@ async def database():
         database_url=url, pool_size=2, coordination_slots=1,
         admission_timeout_seconds=0.05, advisory_lock_timeout_seconds=0.05,
         transformation_timeout_seconds=0.2, cleanup_timeout_seconds=0.2,
-        pool_timeout_seconds=0.05,
+        pool_timeout_seconds=0.5,
     )
     engine = create_engine(settings)
     version = f"test-coordination-{uuid4()}"
@@ -84,6 +84,25 @@ async def database():
 
 async def uppercase(source):
     return source.upper()
+
+
+async def wait_for_lock_waiter(engine, key):
+    """Observe a real server-side wait before interrupting or releasing a holder."""
+    async with asyncio.timeout(5):
+        async with engine.connect() as observer:
+            while True:
+                async with observer.begin():
+                    waiting = await observer.scalar(
+                        text(
+                            "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' "
+                            "AND classid::bigint = :high AND objid::bigint = :low "
+                            "AND objsubid = 1 AND NOT granted"
+                        ),
+                        {"high": (key & ((1 << 64) - 1)) >> 32, "low": key & ((1 << 32) - 1)},
+                    )
+                if waiting:
+                    return
+                await asyncio.sleep(0.01)
 
 
 @pytest.mark.integration
@@ -268,3 +287,207 @@ async def test_uncertain_acquisition_is_discarded_and_wait_settings_do_not_leak(
     async with engine.connect() as connection:
         assert await connection.scalar(text("SHOW lock_timeout")) == "0"
         assert await connection.scalar(text("SHOW statement_timeout")) == "5s"
+
+
+@pytest.mark.integration
+async def test_cancellation_during_server_lock_wait_releases_capacity(database):
+    engine, settings, version = database
+    settings = settings.model_copy(update={"advisory_lock_timeout_seconds": 5})
+    waiter_engine = create_engine(settings)
+    key = transformation_identity("waiting", version=version).advisory_key
+    calls = []
+
+    async def transform(source):
+        calls.append(source)
+        return source.upper()
+
+    task = None
+    try:
+        async with engine.connect() as holder:
+            await holder.execute(text("SELECT pg_advisory_lock(:key)"), {"key": key})
+            await holder.commit()
+            task = asyncio.create_task(
+                cached_transformations(waiter_engine, ["waiting"], transform, version)
+            )
+            await wait_for_lock_waiter(engine, key)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(task, 5)
+            assert calls == []
+            assert waiter_engine.pool.checkedout() == 0
+            async with engine.connect() as observer:
+                assert await observer.scalar(
+                    text("SELECT count(*) FROM transformations WHERE version = :version"),
+                    {"version": version},
+                ) == 0
+            await holder.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": key})
+            await holder.commit()
+        assert await cached_transformations(
+            waiter_engine, ["waiting"], transform, version
+        ) == {"waiting": "WAITING"}
+        assert calls == ["waiting"]
+    finally:
+        if task is not None:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        await waiter_engine.dispose()
+
+
+@pytest.mark.integration
+async def test_advisory_key_collision_serializes_without_reusing_wrong_result(
+    database, monkeypatch
+):
+    engine, settings, version = database
+    settings = settings.model_copy(update={
+        "advisory_lock_timeout_seconds": 5, "transformation_timeout_seconds": 5,
+    })
+    first_engine, second_engine = create_engine(settings), create_engine(settings)
+    key = transformation_identity("collision", version=version).advisory_key
+    monkeypatch.setattr(TransformationIdentity, "advisory_key", property(lambda self: key))
+    started, release = asyncio.Event(), asyncio.Event()
+    calls = []
+
+    async def transform(source):
+        calls.append(source)
+        if source == "first":
+            started.set()
+            await release.wait()
+        return source.upper()
+
+    first = second = None
+    try:
+        first = asyncio.create_task(
+            cached_transformations(first_engine, ["first"], transform, version)
+        )
+        await asyncio.wait_for(started.wait(), 5)
+        second = asyncio.create_task(
+            cached_transformations(second_engine, ["second"], transform, version)
+        )
+        await wait_for_lock_waiter(engine, key)
+        assert calls == ["first"]
+        release.set()
+        assert await asyncio.wait_for(first, 5) == {"first": "FIRST"}
+        assert await asyncio.wait_for(second, 5) == {"second": "SECOND"}
+        assert calls == ["first", "second"]
+        rows = await cached_transformations(engine, ["first", "second"], transform, version)
+        assert rows == {"first": "FIRST", "second": "SECOND"}
+        assert calls == ["first", "second"]
+    finally:
+        release.set()
+        for task in (first, second):
+            if task is not None:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+        await first_engine.dispose()
+        await second_engine.dispose()
+
+
+@pytest.mark.integration
+async def test_backend_loss_allows_repeat_work_but_never_publishes_stale_result(database):
+    engine, settings, version = database
+    settings = settings.model_copy(update={"transformation_timeout_seconds": 5})
+    started, release = asyncio.Event(), asyncio.Event()
+    holder_pids, calls = [], []
+
+    async def transform(source):
+        calls.append(source)
+        if len(calls) == 1:
+            started.set()
+            await release.wait()
+            return "STALE"
+        return "RECOVERED"
+
+    app = create_app(settings, transformer=transform, transformer_version=version)
+    recovery_app = create_app(settings, transformer=transform, transformer_version=version)
+    request = None
+    async with (
+        app.router.lifespan_context(app),
+        recovery_app.router.lifespan_context(recovery_app),
+    ):
+        def record(connection, cursor, statement, parameters, context, executemany):
+            if "SELECT pg_advisory_lock(" in statement:
+                holder_pids.append(connection.connection.driver_connection.get_server_pid())
+
+        event.listen(app.state.engine.sync_engine, "before_cursor_execute", record)
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
+                data = {"list1": ["lost"], "list2": ["lost"]}
+                request = asyncio.create_task(client.post("/payloads", json=data))
+                await asyncio.wait_for(started.wait(), 5)
+                async with engine.begin() as observer:
+                    activity = (await observer.execute(
+                        text("SELECT state, xact_start FROM pg_stat_activity WHERE pid = :pid"),
+                        {"pid": holder_pids[0]},
+                    )).one()
+                    assert activity == ("idle", None)
+                    assert await observer.scalar(
+                        text("SELECT pg_terminate_backend(:pid)"), {"pid": holder_pids[0]}
+                    )
+                # The old external call is still running, but its database lock is gone.
+                async with AsyncClient(
+                    transport=ASGITransport(app=recovery_app), base_url="http://test"
+                ) as recovery_client:
+                    recovered = await recovery_client.post("/payloads", json=data)
+                assert recovered.status_code == 200
+                assert calls == ["lost", "lost"]
+                assert not request.done()
+                release.set()
+                failed = await asyncio.wait_for(request, 5)
+                assert failed.status_code == 503
+                assert failed.json() == {"detail": "Database unavailable"}
+                assert failed.headers["Retry-After"] == "1"
+                assert app.state.engine.pool.checkedout() == 0
+                assert (await client.get(f"/payloads/{recovered.json()['id']}")).json() == {
+                    "output": "RECOVERED, RECOVERED"
+                }
+                retry = await client.post("/payloads", json=data)
+                assert retry.status_code == 200
+                assert retry.json() == recovered.json()
+                assert calls == ["lost", "lost"]
+                async with engine.connect() as observer:
+                    assert (await observer.execute(
+                        text("SELECT result FROM transformations WHERE version = :version"),
+                        {"version": version},
+                    )).scalars().all() == ["RECOVERED"]
+                    assert await observer.scalar(
+                        text("SELECT count(*) FROM payloads WHERE canonical_input LIKE :version"),
+                        {"version": f"%{version}%"},
+                    ) == 1
+        finally:
+            release.set()
+            if request is not None:
+                request.cancel()
+                await asyncio.gather(request, return_exceptions=True)
+            event.remove(app.state.engine.sync_engine, "before_cursor_execute", record)
+
+
+@pytest.mark.integration
+async def test_unconfirmed_unlock_discards_session_and_preserves_committed_result(database):
+    engine, settings, version = database
+    key = transformation_identity("ownership", version=version).advisory_key
+    coordination = engine.get_execution_options()["cache_coordination"]
+    with pytest.raises(DatabaseUnavailable, match="cleanup"):
+        async with coordination.connection(engine, key) as connection:
+            async with connection.begin():
+                await connection.execute(text("SELECT pg_advisory_lock(:key)"), {"key": key})
+            async with connection.begin():
+                await connection.execute(
+                    text(
+                        "INSERT INTO transformations (version, source_digest, source, result) "
+                        "VALUES (:version, :digest, 'ownership', 'COMMITTED')"
+                    ),
+                    {"version": version, "digest": transformation_identity(
+                        "ownership", version=version
+                    ).source_digest},
+                )
+                # Remove ownership on the actual session before normal cleanup runs.
+                await connection.execute(text("SELECT pg_advisory_unlock_all()"))
+    assert engine.pool.checkedout() == 0
+    async with engine.begin() as observer:
+        assert await observer.scalar(text("SELECT pg_try_advisory_lock(:key)"), {"key": key})
+        assert await observer.scalar(text("SELECT pg_advisory_unlock(:key)"), {"key": key})
+    assert await cached_transformations(engine, ["ownership"], uppercase, version) == {
+        "ownership": "COMMITTED"
+    }
