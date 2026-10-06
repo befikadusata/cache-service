@@ -54,7 +54,7 @@ Dependencies identify the required predecessor, rather than requiring every earl
 
 | ID | Work and acceptance evidence | Status | Dependencies | Current artifacts or evidence |
 | --- | --- | --- | --- | --- |
-| B01 | Record author response, identity/storage choices and transformer assumption; resolve CLI flag conflict and output format | Ready | None | Author delegated identity/storage; [README assumptions](../README.md#assessment-assumptions) recorded; uppercase assumption and help alias documented; CLI output format pending |
+| B01 | Record author response, identity/storage choices and transformer assumption; resolve CLI flag conflict and output format | Done | None | Author delegated identity/storage; [README assumptions](../README.md#assessment-assumptions) and [planned CLI policy](../README.md#planned-cli-policy) recorded; JSON Lines selected; documentation consistency and `git diff --check` passed; personal notes updated; commit titled `feat: define CLI JSON Lines output policy` on `feat/b01-cli-output-policy` |
 | B02 | Application lifecycle, PostgreSQL configuration, migration and Compose; inspect setup artifacts | Done | None | [Application](../src/cache_service/main.py), [migration](../migrations/versions/0001_initial.py), [Compose](../compose.yaml); commit `6a492e7` |
 | B03 | Install dependencies, generate lockfile, run lint and foundation tests, apply clean migration, check both health endpoints and image startup | Done | B02; execution/network access | Runtime checks passed on 2026-10-06; `uv.lock` generated; PostgreSQL host port 55432; see verification record below; personal notes updated |
 | B04 | Freeze POST and GET response schemas, strict input validation, empty behavior, configurable limits and request deadlines | Done | Selected B01 assumptions | [Contract](api-contract.md), [models](../src/cache_service/schemas.py), [settings](../src/cache_service/config.py), [tests](../tests/test_schemas.py); 18 focused tests and Ruff passed; personal notes updated; commit titled `Define payload API contract and validation`. Endpoint enforcement remains B07/B11 |
@@ -68,7 +68,7 @@ Dependencies identify the required predecessor, rather than requiring every earl
 | B12 | Preserve successful transformations on later failure; publish complete payload atomically; verify safe retries | Done | B07, B09–B11 | [Payload tests](../tests/test_payloads.py); five new PostgreSQL cases, 142 full-suite tests and Ruff passed; see B12 evidence below; personal notes updated; commit titled `Verify partial success and atomic payload retries` on `feat/b12-atomic-publication-retries` |
 | B13 | Real PostgreSQL tests for timeout, cancellation, saturation, lock loss, collisions, version changes and no open transaction during transform | Done | B11, B12 | [Coordination tests](../tests/test_coordination.py), [cache tests](../tests/test_cache.py), [payload tests](../tests/test_payloads.py); 21 focused tests, 146 full-suite tests and Ruff passed against PostgreSQL; see B13 evidence below; personal notes updated; commit titled `feat: verify PostgreSQL coordination failure recovery` on `feat/b13-postgresql-failure-evidence` |
 | B14 | Multi-process identical and overlapping requests; call counts per distinct string, consistent IDs and restart reuse | Done | B12 | [Separate-process tests](../tests/test_multiprocess.py); two focused cases and 148 full-suite tests passed against PostgreSQL; Ruff passed; see B14 evidence below; personal notes updated; commit titled `feat: verify multi-process cache coordination` on `feat/b14-multiprocess-concurrency` |
-| B15 | Pydantic Settings CLI parsing; host, repeat and mutually exclusive input source validation; resolve help alias | Waiting | B01 output policy; B04 | Parsing implementation pending |
+| B15 | Pydantic Settings CLI parsing; host, repeat and mutually exclusive input source validation; resolve help alias | Ready | B01 output policy; B04 | Prerequisites complete; parsing implementation pending |
 | B16 | CLI create/read loop, file/stdin/JSON input, file/stdout output, stderr diagnostics and nonzero failure exit | Waiting | B07, B15 | Implementation pending |
 | B17 | CLI parsing and I/O tests plus a real-service integration scenario | Waiting | B16 | Tests pending |
 | B18 | Clean Docker build and migration/start smoke test; storage reuse after restart; document supported worker/connection budget | Waiting | B03, B12, B17 | Compose exists; runtime deployment evidence pending |
@@ -119,8 +119,8 @@ The sandbox-only health test stalled and was interrupted; the approved rerun pas
 ## Next work and completion gate
 
 B03–B14 are complete, including partial-success preservation, atomic publication, safe retries,
-controlled PostgreSQL failure recovery and separate-process coordination. Next is B01 CLI
-output policy, then B15–B17 CLI implementation and B18 deployment.
+controlled PostgreSQL failure recovery and separate-process coordination. B01 CLI output
+policy is complete. Next is B15 CLI parsing, then B16–B17 CLI execution/tests and B18 deployment.
 
 Submission is ready only when mandatory behavior, documented reliability guarantees, reproducible setup, and final checks pass; repository history is retained; private material is excluded; video meets the brief; and actual hours are reconciled. B24 remains separate from implementation completion because publishing and sending are delivery actions.
 
