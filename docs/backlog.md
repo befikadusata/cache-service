@@ -66,7 +66,7 @@ Dependencies identify the required predecessor, rather than requiring every earl
 | B10 | One advisory lock at a time, recheck after acquire, same connection for writes; no transaction over external call | Done | B09 | [Cache coordination](../src/cache_service/cache.py), [tests](../tests/test_cache.py); 120 full-suite tests and Ruff passed against PostgreSQL; see B10 evidence below; personal notes updated; commit titled `feat: coordinate transformation misses with advisory locks` on `feat/b10-advisory-coordination` |
 | B11 | Bounded admission and waits, cancellation-safe cleanup, invalidate uncertain ownership; map operational failures to documented HTTP responses | Done | B10, B04 | [Coordination](../src/cache_service/coordination.py), [cache flow](../src/cache_service/cache.py), [tests](../tests/test_coordination.py); 137 full-suite tests and Ruff passed against PostgreSQL; see B11 evidence below; personal notes updated; commit titled `feat: bound cache coordination and protect cleanup` on `feat/b11-bounded-coordination` |
 | B12 | Preserve successful transformations on later failure; publish complete payload atomically; verify safe retries | Done | B07, B09–B11 | [Payload tests](../tests/test_payloads.py); five new PostgreSQL cases, 142 full-suite tests and Ruff passed; see B12 evidence below; personal notes updated; commit titled `Verify partial success and atomic payload retries` on `feat/b12-atomic-publication-retries` |
-| B13 | Real PostgreSQL tests for timeout, cancellation, saturation, lock loss, collisions, version changes and no open transaction during transform | Ready | B11, B12 | Broader controlled failure evidence pending; existing B10–B12 checks cover part of the scope |
+| B13 | Real PostgreSQL tests for timeout, cancellation, saturation, lock loss, collisions, version changes and no open transaction during transform | Done | B11, B12 | [Coordination tests](../tests/test_coordination.py), [cache tests](../tests/test_cache.py), [payload tests](../tests/test_payloads.py); 21 focused tests, 146 full-suite tests and Ruff passed against PostgreSQL; see B13 evidence below; personal notes updated; commit titled `feat: verify PostgreSQL coordination failure recovery` on `feat/b13-postgresql-failure-evidence` |
 | B14 | Multi-process identical and overlapping requests; call counts per distinct string, consistent IDs and restart reuse | Ready | B12 | Test instrumentation pending; single-process evidence insufficient |
 | B15 | Pydantic Settings CLI parsing; host, repeat and mutually exclusive input source validation; resolve help alias | Waiting | B01 output policy; B04 | Parsing implementation pending |
 | B16 | CLI create/read loop, file/stdin/JSON input, file/stdout output, stderr diagnostics and nonzero failure exit | Waiting | B07, B15 | Implementation pending |
@@ -118,9 +118,9 @@ The sandbox-only health test stalled and was interrupted; the approved rerun pas
 
 ## Next work and completion gate
 
-B03–B12 are complete, including partial-success preservation, atomic publication and safe retries.
-Next is B13 broader PostgreSQL failure evidence, followed by B14 multi-process concurrency,
-CLI and deployment.
+B03–B13 are complete, including partial-success preservation, atomic publication, safe retries
+and controlled PostgreSQL failure recovery. Next is B14 multi-process concurrency, followed
+by CLI and deployment.
 
 Submission is ready only when mandatory behavior, documented reliability guarantees, reproducible setup, and final checks pass; repository history is retained; private material is excluded; video meets the brief; and actual hours are reconciled. B24 remains separate from implementation completion because publishing and sending are delivery actions.
 
@@ -338,3 +338,38 @@ The existing implementation satisfies these cases; no production change, schema 
 dependency change was needed. These faults precede commit and do not establish behavior for
 lost commit acknowledgments or all connection-loss windows. Broader failure and multi-process
 evidence remains B13/B14. Personal request-flow and design notes updated outside Git.
+
+## B13 acceptance evidence
+
+Verification on 2026-10-06:
+
+- Focused `.venv/bin/pytest tests/test_coordination.py -q --tb=short` against PostgreSQL:
+  21 passed, including four new integration scenarios.
+- Full `.venv/bin/pytest -q --tb=short` with TEST_DATABASE_URL derived internally from masked
+  Settings: 146 passed; one existing upstream TestClient deprecation warning.
+- `.venv/bin/ruff check .` and `git diff --check`: passed.
+- Initial sandbox run could not open PostgreSQL sockets. The first approved focused run
+  exposed a test setup problem: a single admission slot prevented the intended competing
+  request, and the 50 ms checkout budget was too short for a cold connection. A separate
+  application models the competitor; the fixture now allows 500 ms for checkout. Approved
+  focused and full reruns passed. No database URLs or credentials were printed.
+
+New tests observe PostgreSQL lock waiters before cancelling or releasing them. Cancellation
+while waiting does not invoke the transformer or populate the cache, releases checkout and
+admission, and permits a retry. Forced advisory-key collisions serialize distinct strings but
+retain separate correct cache values. Removing session ownership before cleanup produces a
+failure, discards the connection, and preserves a result already committed.
+
+The backend-loss test identifies only its own lock holder's PID, verifies PostgreSQL reports
+an idle session with no transaction, and terminates that backend. A separate application
+successfully repeats the transformation while the original external call remains paused.
+The original request returns generic HTTP 503 with Retry-After and cannot overwrite the
+recovered result or publish another payload. Retry reuses the recovered identifier without
+another call. This proves the documented connection-loss repeat-work window, not exactly-once
+execution or behavior for every possible lost commit acknowledgment.
+
+Existing B10–B12 evidence supplies timeout, saturation, uncertain acquisition, partial-success,
+digest-collision, version-change, same-session persistence and transaction-boundary checks.
+The backend-loss scenario also independently checks transaction state through pg_stat_activity.
+No production code, migration or dependency change was required. Personal coordination notes
+and recovery cookbook updated outside Git. B14 still owns separate-process concurrency evidence.
