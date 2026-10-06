@@ -150,6 +150,14 @@ async def test_failed_transform_does_not_publish(payload_app):
             )
             == 0
         )
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/payloads", json=data)
+        assert response.status_code == 200
+        identifier = response.json()["id"]
+        assert (await client.get(f"/payloads/{identifier}")).json() == {
+            "output": f"{marker.upper()}, FAIL"
+        }
+        assert (await client.post("/payloads", json=data)).json() == {"id": identifier}
 
 
 @pytest.mark.integration
@@ -178,8 +186,20 @@ async def test_payload_digest_collision_is_rejected(payload_app):
 @pytest.mark.parametrize(
     "data",
     [
+        {},
+        {"list1": []},
+        {"list2": []},
         {"list1": [1], "list2": ["a"]},
+        {"list1": ["a"], "list2": [1]},
+        {"list1": [True], "list2": ["a"]},
+        {"list1": ["a"], "list2": [1.5]},
+        {"list1": [None], "list2": ["a"]},
+        {"list1": ["a"], "list2": [{}]},
+        {"list1": [["a"]], "list2": ["b"]},
+        {"list1": "a", "list2": ["b"]},
+        {"list1": ["a"], "list2": {}},
         {"list1": [], "list2": ["a"]},
+        {"list1": ["a"], "list2": []},
         {"list1": [], "list2": [], "extra": True},
         {"list1": None, "list2": []},
         [],
@@ -194,14 +214,53 @@ async def test_invalid_payload_is_rejected_before_database_access(data):
             assert isinstance(response.json()["detail"], list)
 
 
-async def test_request_validation_uses_configured_limits():
-    settings = Settings(_env_file=None, db_pass="test", db_port=1, max_list_items=1)
+@pytest.mark.parametrize(
+    ("limits", "data", "message"),
+    [
+        (
+            {"max_list_items": 1},
+            {"list1": ["a", "b"], "list2": ["c", "d"]},
+            "List item limit exceeded",
+        ),
+        (
+            {"max_string_characters": 1},
+            {"list1": ["ab"], "list2": ["c"]},
+            "String character limit exceeded",
+        ),
+        (
+            {"max_string_characters": 1},
+            {"list1": ["a"], "list2": ["bc"]},
+            "String character limit exceeded",
+        ),
+        (
+            {"max_total_characters": 3},
+            {"list1": ["a", "a"], "list2": ["a", "a"]},
+            "Total character limit exceeded",
+        ),
+    ],
+)
+async def test_request_validation_uses_configured_limits(limits, data, message):
+    settings = Settings(_env_file=None, db_pass="test", db_port=1, **limits)
     app = create_app(settings)
     async with app.router.lifespan_context(app):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-            response = await c.post("/payloads", json={"list1": ["a", "b"], "list2": ["c", "d"]})
+            response = await c.post("/payloads", json=data)
             assert response.status_code == 422
-            assert "List item limit exceeded" in response.json()["detail"][0]["msg"]
+            assert message in response.json()["detail"][0]["msg"]
+
+
+async def test_malformed_json_and_uuid_are_rejected_before_database_access():
+    app = create_app(Settings(_env_file=None, db_pass="test", db_port=1))
+    async with app.router.lifespan_context(app):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                "/payloads", content='{"list1":', headers={"Content-Type": "application/json"}
+            )
+            assert response.status_code == 422
+            assert isinstance(response.json()["detail"], list)
+            response = await client.get("/payloads/not-a-uuid")
+            assert response.status_code == 422
+            assert isinstance(response.json()["detail"], list)
 
 
 @pytest.mark.integration
@@ -289,3 +348,72 @@ async def test_custom_limit_can_exceed_default(payload_app):
                 "/payloads", json={"list1": [marker] * 101, "list2": [""] * 101}
             )
             assert response.status_code == 200
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("first", "second", "first_output", "second_output"),
+    [
+        ((["a"], ["b"]), (["A"], ["b"]), "A, B", "A, B"),
+        ((["a"], ["b"]), ([" a "], ["b"]), "A, B", " A , B"),
+        ((["a", "b"], ["c", "d"]), (["b", "a"], ["c", "d"]), "A, C, B, D", "B, C, A, D"),
+        ((["a"], ["b"]), (["b"], ["a"]), "A, B", "B, A"),
+        ((["a"], ["b"]), (["a", "a"], ["b", "b"]), "A, B", "A, B, A, B"),
+        ((["é"], ["ß"]), (["e\u0301"], ["ß"]), "É, SS", "E\u0301, SS"),
+    ],
+    ids=["case", "whitespace", "order", "list-boundaries", "duplicates", "unicode"],
+)
+async def test_api_identity_preserves_exact_ordered_inputs(
+    payload_app, first, second, first_output, second_output
+):
+    app, marker = payload_app
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        identifiers = []
+        for (list1, list2), output in ((first, first_output), (second, second_output)):
+            data = {"list1": [marker, *list1], "list2": ["", *list2]}
+            response = await client.post("/payloads", json=data)
+            assert response.status_code == 200
+            identifier = response.json()["id"]
+            assert response.json() == {"id": str(UUID(identifier))}
+            identifiers.append(identifier)
+            response = await client.get(f"/payloads/{identifier}")
+            assert response.status_code == 200
+            assert response.json() == {"output": f"{marker.upper()}, , {output}"}
+            response = await client.post("/payloads", json=data)
+            assert response.status_code == 200
+            assert response.json() == {"id": identifier}
+        assert identifiers[0] != identifiers[1]
+
+
+@pytest.mark.integration
+async def test_version_change_creates_new_id_and_keeps_old_payload_readable(payload_app):
+    app, marker = payload_app
+    data = {"list1": [marker], "list2": ["MiXeD"]}
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/payloads", json=data)
+        assert response.status_code == 200
+        original_id = response.json()["id"]
+
+    async def lowercase_transform(source):
+        return source.lower()
+
+    application = create_app(
+        Settings(database_url=os.environ["TEST_DATABASE_URL"]),
+        transformer=lowercase_transform,
+        transformer_version="lowercase-v1",
+    )
+    async with application.router.lifespan_context(application):
+        async with AsyncClient(
+            transport=ASGITransport(app=application), base_url="http://test"
+        ) as client:
+            response = await client.post("/payloads", json=data)
+            assert response.status_code == 200
+            new_id = response.json()["id"]
+            assert new_id != original_id
+            response = await client.get(f"/payloads/{original_id}")
+            assert response.status_code == 200
+            assert response.json() == {"output": f"{marker.upper()}, MIXED"}
+            response = await client.get(f"/payloads/{new_id}")
+            assert response.status_code == 200
+            assert response.json() == {"output": f"{marker.lower()}, mixed"}
+            assert (await client.post("/payloads", json=data)).json() == {"id": new_id}
