@@ -46,11 +46,23 @@ class Settings(BaseSettings):
         return value
 
     pool_size: int = Field(default=10, ge=2, le=100)
-    pool_timeout_seconds: float = Field(default=5, gt=0)
-    database_connect_timeout_seconds: float = Field(default=5, gt=0)
-    database_statement_timeout_seconds: float = Field(default=5, gt=0)
+    pool_timeout_seconds: float = Field(default=5, gt=0, allow_inf_nan=False)
+    database_connect_timeout_seconds: float = Field(default=5, gt=0, allow_inf_nan=False)
+    database_statement_timeout_seconds: float = Field(default=5, gt=0, allow_inf_nan=False)
     max_list_items: int = Field(default=100, ge=1)
     max_string_characters: int = Field(default=10000, ge=1)
     max_total_characters: int = Field(default=100000, ge=1)
     generation_timeout_seconds: float = Field(default=60, gt=0, allow_inf_nan=False)
     read_timeout_seconds: float = Field(default=10, gt=0, allow_inf_nan=False)
+
+    coordination_slots: int = Field(default=8, ge=1)
+    admission_timeout_seconds: float = Field(default=5, gt=0, allow_inf_nan=False)
+    advisory_lock_timeout_seconds: float = Field(default=35, ge=0.001, allow_inf_nan=False)
+    transformation_timeout_seconds: float = Field(default=30, gt=0, allow_inf_nan=False)
+    cleanup_timeout_seconds: float = Field(default=5, gt=0, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def reserve_read_capacity(self) -> "Settings":
+        if self.coordination_slots >= self.pool_size:
+            raise ValueError("COORDINATION_SLOTS must be less than POOL_SIZE")
+        return self

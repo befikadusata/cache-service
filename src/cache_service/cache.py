@@ -1,10 +1,12 @@
 """Versioned successful-result caching with short PostgreSQL transactions."""
 
+import asyncio
 from collections.abc import Sequence
 
 from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from cache_service.coordination import DatabaseUnavailable, TransformationTimedOut
 from cache_service.identity import transformation_identity
 from cache_service.transformation import Transformer
 
@@ -13,10 +15,6 @@ _READ_BATCH_SIZE = 500
 
 class TransformationFailed(RuntimeError):
     """The replaceable transformer failed before publication."""
-
-
-class DatabaseUnavailable(RuntimeError):
-    """Database connection establishment exceeded its own timeout."""
 
 
 async def cached_transformations(
@@ -57,6 +55,8 @@ async def cached_transformations(
     except TimeoutError as exc:
         raise DatabaseUnavailable("Database unavailable") from exc
 
+    coordination = engine.get_execution_options()["cache_coordination"]
+    settings = coordination.settings
     for source, identity in identities.items():
         if source in results:
             continue
@@ -65,64 +65,47 @@ async def cached_transformations(
             "SELECT version, source, result FROM transformations "
             "WHERE version = :version AND source_digest = :digest"
         )
-        transforming = False
-        try:
-            async with engine.connect() as connection:
+        async with coordination.connection(engine, identity.advisory_key) as connection:
+            # Transaction-local budgets must not leak into the pooled session.
+            async with connection.begin():
+                lock_ms = max(1, int(settings.advisory_lock_timeout_seconds * 1000))
+                await connection.execute(
+                    text("SELECT set_config('lock_timeout', :lock, true), "
+                         "set_config('statement_timeout', :statement, true)"),
+                    {"lock": str(lock_ms), "statement": str(lock_ms + 1000)},
+                )
+                await connection.execute(
+                    text("SELECT pg_advisory_lock(:key)"), {"key": identity.advisory_key}
+                )
+            async with connection.begin():
+                query = await connection.execute(lookup, parameters)
+                stored = query.mappings().one_or_none()
+                if stored is not None:
+                    identity.verify_stored(stored["version"], stored["source"])
+
+            if stored is None:
+                # Retain the lock connection, but no transaction, during external work.
                 try:
-                    # Session ownership survives commit; acquire only once on this connection.
-                    async with connection.begin():
-                        await connection.execute(
-                            text("SELECT pg_advisory_lock(:key)"), {"key": identity.advisory_key}
-                        )
-                    async with connection.begin():
-                        query = await connection.execute(lookup, parameters)
-                        stored = query.mappings().one_or_none()
-                        if stored is not None:
-                            identity.verify_stored(stored["version"], stored["source"])
+                    async with asyncio.timeout(settings.transformation_timeout_seconds):
+                        result = await transformer(source)
+                except TimeoutError as exc:
+                    raise TransformationTimedOut("Transformation timed out") from exc
+                except Exception as exc:
+                    raise TransformationFailed("Transformation failed") from exc
 
-                    if stored is None:
-                        # Retain the lock connection, but no transaction, during external work.
-                        transforming = True
-                        try:
-                            result = await transformer(source)
-                        except TimeoutError:
-                            raise
-                        except Exception as exc:
-                            raise TransformationFailed("Transformation failed") from exc
-
-                        transforming = False
-                        async with connection.begin():
-                            await connection.execute(
-                                text(
-                                    "INSERT INTO transformations "
-                                    "(version, source_digest, source, result) "
-                                    "VALUES (:version, :digest, :source, :result) "
-                                    "ON CONFLICT (version, source_digest) DO NOTHING"
-                                ),
-                                {**parameters, "source": source, "result": result},
-                            )
-                            # A fresh statement sees a conflicting insert's authoritative row.
-                            query = await connection.execute(lookup, parameters)
-                            stored = query.mappings().one()
-                            identity.verify_stored(stored["version"], stored["source"])
-
-                    # Persistence committed before unlock; rollback-on-return cannot unlock.
-                    async with connection.begin():
-                        released = await connection.scalar(
-                            text("SELECT pg_advisory_unlock(:key)"),
-                            {"key": identity.advisory_key},
-                        )
-                        if released is not True:
-                            raise RuntimeError("Transformation lock ownership lost")
-                except BaseException:
-                    # Even acquisition can fail after the server took ownership. Never pool
-                    # a session whose lock state is uncertain. B11 adds protected budgets.
-                    await connection.invalidate()
-                    raise
-            results[source] = stored["result"]
-        except TimeoutError as exc:
-            # Transformer timeout must retain its existing HTTP 504 classification.
-            if transforming:
-                raise
-            raise DatabaseUnavailable("Database unavailable") from exc
+                async with connection.begin():
+                    await connection.execute(
+                        text(
+                            "INSERT INTO transformations "
+                            "(version, source_digest, source, result) "
+                            "VALUES (:version, :digest, :source, :result) "
+                            "ON CONFLICT (version, source_digest) DO NOTHING"
+                        ),
+                        {**parameters, "source": source, "result": result},
+                    )
+                    # A fresh statement sees a conflicting insert's authoritative row.
+                    query = await connection.execute(lookup, parameters)
+                    stored = query.mappings().one()
+                    identity.verify_stored(stored["version"], stored["source"])
+        results[source] = stored["result"]
     return results
