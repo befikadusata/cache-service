@@ -10,7 +10,7 @@ This backlog tracks the assessment from requirements through submission. It is t
 - **Waiting**: clarification or a predecessor is pending.
 - **Blocked**: an external restriction prevents the next check or action.
 
-For each implementation change, update the affected item, add code or test links and the commit, and record executed verification. Keep failed checks visible until resolved. A commit alone does not prove acceptance. Any changed requirement must update its mapped items and tests. Use the current provisional interpretations until the task author replies; confirmation is not required to make independent progress.
+For each implementation change, update the affected item, add code or test links and the commit, and record executed verification. Keep failed checks visible until resolved. A commit alone does not prove acceptance. Any changed requirement must update its mapped items and tests. The task author delegated identity and storage choices; use the assumptions recorded in the README and revisit affected items if new instructions arrive.
 
 ## Personal preparation alongside implementation
 
@@ -54,10 +54,10 @@ Dependencies identify the required predecessor, rather than requiring every earl
 
 | ID | Work and acceptance evidence | Status | Dependencies | Current artifacts or evidence |
 | --- | --- | --- | --- | --- |
-| B01 | Record author answers about input/output identity, filesystem storage, uppercase; resolve CLI flag conflict and output format | Waiting | Author response for confirmation only | [Requirements](requirements.md); provisional choices recorded; CLI output format pending |
+| B01 | Record author response, identity/storage choices and transformer assumption; resolve CLI flag conflict and output format | Ready | None | Author delegated identity/storage; [README assumptions](../README.md#assessment-assumptions) recorded; uppercase assumption and help alias documented; CLI output format pending |
 | B02 | Application lifecycle, PostgreSQL configuration, migration and Compose; inspect setup artifacts | Written | None | [Application](../src/cache_service/main.py), [migration](../migrations/versions/0001_initial.py), [Compose](../compose.yaml); commit `6a492e7` |
 | B03 | Install dependencies, generate lockfile, run lint and foundation tests, apply clean migration, check both health endpoints and image startup | Blocked | B02; execution/network access | Syntax and Compose config passed; runtime checks blocked; see verification record below |
-| B04 | Freeze POST and GET response schemas, strict input validation, empty behavior, configurable limits and request deadlines | Ready | Provisional B01 choices | POST identifier field and status, malformed ID behavior, bounds and deadlines still to specify |
+| B04 | Freeze POST and GET response schemas, strict input validation, empty behavior, configurable limits and request deadlines | Ready | Selected B01 assumptions | POST identifier field and status, malformed ID behavior, bounds and deadlines still to specify |
 | B05 | Define canonical encoding, version and digest identities; verify list boundaries, order, whitespace and collision handling | Ready | B04 | Design in [architecture](architecture.md); implementation pending |
 | B06 | Replaceable uppercase transformer and alternating composition; meaningful isolated tests | Ready | B04 | Sample output and empty input policy in requirements |
 | B07 | Create and read complete payloads; generated UUID plus unique input digest; duplicate creation returns stored ID | Waiting | B03–B06 | Initial schema written; request flow pending |

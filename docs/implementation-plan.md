@@ -6,7 +6,7 @@ Track current status, dependencies, requirement coverage, and executed evidence 
 
 ## Stage 1 Requirements and design
 
-Reconcile any task-author responses with the acceptance criteria. Database, coordination, transaction, versioning, and partial-success decisions are recorded. Finalize the provisional identity and storage interpretation if clarification arrives. Specify API response schemas, canonical encoding, input limits, CLI output format, and initial configurable timeout and capacity values before their implementation.
+Reconcile any task-author responses with the acceptance criteria. Database, coordination, transaction, versioning, and partial-success decisions are recorded. Identity and storage choices were delegated by the task author and are recorded in the README; reconcile any future changes with the design. Specify API response schemas, canonical encoding, input limits, CLI output format, and initial configurable timeout and capacity values before their implementation.
 
 Exit evidence: each mandatory requirement has an acceptance check; consequential architecture decisions have clear rationale and limits.
 

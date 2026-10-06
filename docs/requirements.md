@@ -1,6 +1,6 @@
 # Requirements and acceptance criteria
 
-The service must satisfy the supplied Python caching assessment. Required behavior is separated from provisional interpretations and additional reliability goals so that implementation choices remain reviewable.
+The service must satisfy the supplied Python caching assessment. Required behavior is separated from documented assumptions and additional reliability goals so that implementation choices remain reviewable.
 
 ## Required behavior
 
@@ -17,15 +17,17 @@ The service must satisfy the supplied Python caching assessment. Required behavi
 | Dockerize the application | Build and run checks verify API access and documented database persistence |
 | Demonstrate unit and integration testing | Tests cover isolated transformation behavior and real API/database interaction |
 
-## Pending clarification
+## Delegated decisions and assumptions
 
-| Question | Provisional interpretation | Affected decisions |
+The task author responded that both payload identity and storage are our call and requested assumptions in the README. These choices are now selected rather than awaiting confirmation.
+
+| Topic | Selected interpretation | Affected decisions |
 | --- | --- | --- |
-| Is payload reuse based on identical input or identical generated output? | Identical ordered input lists | Identity key and reuse tests |
-| Does payload files require actual files on disk? | Store generated payloads in the database | Storage model and deployment |
-| Is uppercase the intended transformer? | Deterministic uppercase conversion following the sample | Transformer implementation and expected output |
+| Payload reuse | Identical ordered input lists under the same transformer version | Identity key and reuse tests; equal output alone does not imply reuse |
+| Payload files | Complete generated payloads stored in PostgreSQL, without filesystem files | Storage model, atomic publication and deployment |
+| Transformer | Deterministic uppercase conversion following the sample | Implementation assumption, not a separately confirmed contract |
 
-These interpretations are not confirmed requirements. Record the task author's response here and revise affected decisions before implementation relies on different behavior.
+See the [README assumptions](../README.md#assessment-assumptions) for rationale. Revisit these choices if new instructions change the contract.
 
 ## Proposed input and CLI policy
 

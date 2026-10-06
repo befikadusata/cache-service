@@ -1,6 +1,6 @@
 # Architecture decisions
 
-Use PostgreSQL with SQLAlchemy 2.x asynchronous database access, per-string session advisory locks, and short transactions. This design coordinates workers sharing the database while retaining successful transformations independently of complete payload publication. Payload identity and database storage remain subject to the task author's clarification.
+Use PostgreSQL with SQLAlchemy 2.x asynchronous database access, per-string session advisory locks, and short transactions. This design coordinates workers sharing the database while retaining successful transformations independently of complete payload publication. The task author delegated identity and storage decisions: select exact ordered inputs under the transformer version for identity, and PostgreSQL for complete payload storage. The README records these assumptions.
 
 ## Responsibility boundaries
 
@@ -86,4 +86,4 @@ Prove API behavior, restart persistence, multi-process coordination, overlapping
 
 ## Changes requiring a design review
 
-Parallelizing strings requires revisiting capacity and connection ownership. Bulk lock acquisition requires ordering actual lock keys. Transaction-mode pooling requires a different coordination mechanism. Output-based payload identity or filesystem payload storage requires revising the provisional identity and persistence decisions when clarification arrives.
+Parallelizing strings requires revisiting capacity and connection ownership. Bulk lock acquisition requires ordering actual lock keys. Transaction-mode pooling requires a different coordination mechanism. A future requirement for output-based identity or filesystem payload storage would require revisiting the selected identity and persistence decisions.

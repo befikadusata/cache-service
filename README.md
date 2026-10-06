@@ -4,7 +4,15 @@ A FastAPI service that transforms two lists of strings, interleaves their result
 
 ## Project status
 
-Runnable foundation added: application lifecycle, health endpoints, database configuration, initial migration, and Docker Compose. Payload endpoints, transformation caching, and CLI are not implemented yet. Payload identity and payload storage assumptions remain subject to clarification from the task author.
+Runnable foundation added: application lifecycle, health endpoints, database configuration, initial migration, and Docker Compose. Payload endpoints, transformation caching, and CLI are not implemented yet.
+
+## Assessment assumptions
+
+The task author delegated the payload identity and storage choices to us and asked that assumptions be documented here.
+
+- **Payload identity:** identical ordered input lists under the same transformer version reuse the same identifier. Case, whitespace, list boundaries, duplicates and order are preserved. Different inputs may produce the same uppercase output and still receive different identifiers. This treats creation as a repeatable operation on a request without conflating distinct requests.
+- **Payload storage:** complete generated payloads are stored in PostgreSQL and retrieved by identifier. No filesystem payload files are created. Keeping payloads and reusable transformations in one durable database simplifies atomic publication and multi-worker access.
+- **Transformer:** deterministic uppercase conversion follows the sample. This remains our implementation assumption rather than an explicitly confirmed transformation contract.
 
 ## Engineering documentation
 
