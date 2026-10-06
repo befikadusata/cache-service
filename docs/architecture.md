@@ -47,7 +47,9 @@ before the next string begins. On any exception, including acquisition uncertain
 unlock, invalidate the connection rather than returning possible session ownership to the pool.
 B11 uses transaction-local lock and statement timeouts for acquisition, admission below fixed
 pool capacity, an external-operation deadline, and bounded cancellation-protected cleanup.
-B13 verifies forced backend loss and ownership loss; separate-process evidence remains B14.
+B13 verifies forced backend loss and ownership loss. B14 verifies separate spawned application
+processes sharing PostgreSQL, including actual lock contention, per-source call counts,
+identical IDs and reuse after process restart; see `tests/test_multiprocess.py`.
 Healthy concurrent sessions now serialize shared misses and reuse committed results.
 Configured overall deadlines and generic error responses are wired; 503 includes Retry-After. PostgreSQL text storage does not support every possible
 Python string, including NUL and lone surrogate values; such storage failures return a generic

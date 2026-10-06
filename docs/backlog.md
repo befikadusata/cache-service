@@ -67,7 +67,7 @@ Dependencies identify the required predecessor, rather than requiring every earl
 | B11 | Bounded admission and waits, cancellation-safe cleanup, invalidate uncertain ownership; map operational failures to documented HTTP responses | Done | B10, B04 | [Coordination](../src/cache_service/coordination.py), [cache flow](../src/cache_service/cache.py), [tests](../tests/test_coordination.py); 137 full-suite tests and Ruff passed against PostgreSQL; see B11 evidence below; personal notes updated; commit titled `feat: bound cache coordination and protect cleanup` on `feat/b11-bounded-coordination` |
 | B12 | Preserve successful transformations on later failure; publish complete payload atomically; verify safe retries | Done | B07, B09–B11 | [Payload tests](../tests/test_payloads.py); five new PostgreSQL cases, 142 full-suite tests and Ruff passed; see B12 evidence below; personal notes updated; commit titled `Verify partial success and atomic payload retries` on `feat/b12-atomic-publication-retries` |
 | B13 | Real PostgreSQL tests for timeout, cancellation, saturation, lock loss, collisions, version changes and no open transaction during transform | Done | B11, B12 | [Coordination tests](../tests/test_coordination.py), [cache tests](../tests/test_cache.py), [payload tests](../tests/test_payloads.py); 21 focused tests, 146 full-suite tests and Ruff passed against PostgreSQL; see B13 evidence below; personal notes updated; commit titled `feat: verify PostgreSQL coordination failure recovery` on `feat/b13-postgresql-failure-evidence` |
-| B14 | Multi-process identical and overlapping requests; call counts per distinct string, consistent IDs and restart reuse | Ready | B12 | Test instrumentation pending; single-process evidence insufficient |
+| B14 | Multi-process identical and overlapping requests; call counts per distinct string, consistent IDs and restart reuse | Done | B12 | [Separate-process tests](../tests/test_multiprocess.py); two focused cases and 148 full-suite tests passed against PostgreSQL; Ruff passed; see B14 evidence below; personal notes updated; commit titled `feat: verify multi-process cache coordination` on `feat/b14-multiprocess-concurrency` |
 | B15 | Pydantic Settings CLI parsing; host, repeat and mutually exclusive input source validation; resolve help alias | Waiting | B01 output policy; B04 | Parsing implementation pending |
 | B16 | CLI create/read loop, file/stdin/JSON input, file/stdout output, stderr diagnostics and nonzero failure exit | Waiting | B07, B15 | Implementation pending |
 | B17 | CLI parsing and I/O tests plus a real-service integration scenario | Waiting | B16 | Tests pending |
@@ -118,9 +118,9 @@ The sandbox-only health test stalled and was interrupted; the approved rerun pas
 
 ## Next work and completion gate
 
-B03–B13 are complete, including partial-success preservation, atomic publication, safe retries
-and controlled PostgreSQL failure recovery. Next is B14 multi-process concurrency, followed
-by CLI and deployment.
+B03–B14 are complete, including partial-success preservation, atomic publication, safe retries,
+controlled PostgreSQL failure recovery and separate-process coordination. Next is B01 CLI
+output policy, then B15–B17 CLI implementation and B18 deployment.
 
 Submission is ready only when mandatory behavior, documented reliability guarantees, reproducible setup, and final checks pass; repository history is retained; private material is excluded; video meets the brief; and actual hours are reconciled. B24 remains separate from implementation completion because publishing and sending are delivery actions.
 
@@ -373,3 +373,16 @@ digest-collision, version-change, same-session persistence and transaction-bound
 The backend-loss scenario also independently checks transaction state through pg_stat_activity.
 No production code, migration or dependency change was required. Personal coordination notes
 and recovery cookbook updated outside Git. B14 still owns separate-process concurrency evidence.
+
+
+## B14 acceptance evidence
+
+Verification on 2026-10-06:
+
+- `tests/test_multiprocess.py`: two PostgreSQL cases passed using the multiprocessing spawn context, independent application engines and event loops, and IPC transformer-call reporting.
+- The holder pauses on the first shared transformation until `pg_locks` shows a holder and waiter on its exact key with different backend PIDs. Identical and overlapping requests each make one call per distinct missing string; request duplicates cause no extra calls.
+- Identical inputs return the same UUID; overlapping distinct inputs return different UUIDs and correct alternating output. After both original processes exit, a fresh process reuses both UUIDs and generates a new ordered payload entirely from cached strings with zero transformer calls.
+- `.venv/bin/pytest -q` with `TEST_DATABASE_URL` supplied privately from validated settings: 148 passed, one existing upstream TestClient deprecation warning. Focused run: 2 passed. Ruff and `git diff --check` passed.
+- The sandbox focused attempt stalled and was interrupted; the approved run outside the sandbox passed. Private multi-process walkthrough notes updated outside Git.
+
+HTTP requests use ASGITransport inside separate application processes. This proves cross-process PostgreSQL coordination and persisted reuse; networked deployment startup remains B18. Crash and connection-loss repeat-work limitations remain as documented in architecture and verified by B13. No application behavior or schema changes were needed.
