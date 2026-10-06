@@ -2,7 +2,8 @@
 
 Payload routes are implemented in B07, including configured input validation and overall
 POST/GET deadlines. B09 implements per-string caching and request deduplication. Coordination,
-capacity, cleanup, and operational failure evidence remain B10–B14 work.
+capacity and protected cleanup are implemented through B11; broader failure and multi-process
+evidence remain B13–B14 work.
 
 `POST /payloads` accepts a JSON object containing exactly `list1` and `list2`.
 Both must be arrays of strings of equal length. Missing fields, extra fields,
@@ -30,6 +31,15 @@ transformer version change.
 | MAX_TOTAL_CHARACTERS | 100000 | Sum of code points across both lists, including duplicates |
 | GENERATION_TIMEOUT_SECONDS | 60 | Overall POST application work after input validation |
 | READ_TIMEOUT_SECONDS | 10 | Overall GET database lookup |
+| POOL_SIZE | 10 | Fixed connections per application worker; no overflow |
+| COORDINATION_SLOTS | 8 | Active missing-string holders and waiters; less than POOL_SIZE |
+| ADMISSION_TIMEOUT_SECONDS | 5 | Wait before checking out a coordination connection |
+| POOL_TIMEOUT_SECONDS | 5 | Pool checkout; coordination also bounds total checkout elapsed time |
+| DATABASE_CONNECT_TIMEOUT_SECONDS | 5 | Driver connection establishment |
+| DATABASE_STATEMENT_TIMEOUT_SECONDS | 5 | Ordinary PostgreSQL statements |
+| ADVISORY_LOCK_TIMEOUT_SECONDS | 35 | Transaction-local advisory waiting; at least 0.001 seconds |
+| TRANSFORMATION_TIMEOUT_SECONDS | 30 | Each external transformation call |
+| CLEANUP_TIMEOUT_SECONDS | 5 | Cleanup, split between graceful release and forced disposal |
 
 Limits must be positive integers; deadlines must be positive finite numbers.
 `PayloadCreate.model_validate(data, context={"settings": settings})` applies the
@@ -51,3 +61,16 @@ failure. Responses and logs must not expose raw input or database credentials.
 Clients may retry 502/503/504 with bounded backoff using identical input; validation
 failures require correcting input. Numeric coordination and cleanup budgets remain
 B11 work. No uncoordinated fallback is permitted.
+
+
+B11 waits for admission before connection checkout and releases admission only after cleanup.
+Advisory acquisition uses transaction-local lock_timeout and a statement_timeout one second
+longer than the lock budget; both revert at transaction end. Timeout never triggers an
+uncoordinated transformer call. Cleanup is shielded against repeated request cancellation.
+Failure invalidates the session; failed unlock or stalled graceful cleanup force-terminates
+its asyncpg socket before invalidation and close. Cleanup can extend the overall request deadline
+by its configured budget. These bounds rely on cooperative async operations and an available
+event loop; a blocking transformer must be adapted before use.
+
+503 responses include Retry-After: 1. Clients may retry with backoff; 502 and 504 retries can
+reuse committed transformations but may repeat externally completed, uncommitted work.

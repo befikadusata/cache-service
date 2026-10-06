@@ -63,7 +63,10 @@ def create_app(
         else:
             status, detail = 503, "Database unavailable"
         logger.warning("Payload operation failed: %s", type(exc).__name__)
-        return JSONResponse(status_code=status, content={"detail": detail})
+        return JSONResponse(
+            status_code=status, content={"detail": detail},
+            headers={"Retry-After": "1"} if status == 503 else None,
+        )
 
     for error_type in (
         SQLAlchemyError,

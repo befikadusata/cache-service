@@ -6,8 +6,8 @@ A FastAPI service that transforms two lists of strings, interleaves their result
 
 The foundation and payload endpoints are implemented: strict validation, uppercase transformation,
 alternating composition, PostgreSQL storage, and reuse of identifiers for identical inputs.
-Per-string transformation caching is implemented. Worker coordination and the CLI remain
-planned work.
+Per-string transformation caching and bounded session advisory coordination are implemented.
+Broader failure/concurrency verification and the CLI remain planned work.
 
 ## Payload API
 
@@ -36,7 +36,8 @@ results survive a later transformer failure so retries only transform remaining 
 reads are batched; conflicting inserts use verified authoritative readback. Each missing string
 holds one session advisory lock, rechecks the cache after acquisition, and commits on that same
 connection before unlock. No transaction spans transformation. Initial concurrent-session tests
-pass; bounded admission, protected cleanup and multi-process evidence remain B11–B14 work.
+pass. B11 adds bounded admission, separate wait deadlines and cancellation-protected cleanup.
+Broader failure and multi-process evidence remain B13–B14 work.
 Crashes or connection loss can still cause repeated external calls.
 
 ## Assessment assumptions
@@ -93,7 +94,7 @@ uv run alembic upgrade head
 uv run uvicorn cache_service.main:create_app --factory
 ```
 
-The application builds its connection URL from `DB_HOST` (default `127.0.0.1`), `DB_PORT` (5432), `DB_USER` (`cache`), `DB_NAME` (`cache`), and required `DB_PASS`. Credentials are URL-escaped and masked in diagnostics. An optional nonempty `DATABASE_URL` overrides these connection values, preserving existing local configurations; omit it when using separate `DB_*` settings. Compose supplies separate settings and does not forward that local override. Initial pool capacity is ten connections per process, with no overflow; connection checkout, connection establishment, and ordinary database statements each have a five-second budget. These are configurable starting values, not performance claims. Advisory acquisition currently uses the ordinary statement budget; B11 will add separate lock waiting and admission budgets.
+The application builds its connection URL from `DB_HOST` (default `127.0.0.1`), `DB_PORT` (5432), `DB_USER` (`cache`), `DB_NAME` (`cache`), and required `DB_PASS`. Credentials are URL-escaped and masked in diagnostics. An optional nonempty `DATABASE_URL` overrides these connection values, preserving existing local configurations; omit it when using separate `DB_*` settings. Compose supplies separate settings and does not forward that local override. Initial pool capacity is ten connections per process, with no overflow; connection checkout, connection establishment, and ordinary database statements each have a five-second budget. These are configurable starting values, not performance claims. Coordination admits at most eight active misses per process, reserving two pool connections for ordinary operations. Admission has a five-second budget; advisory waiting has 35 seconds, transformation 30 seconds, and cleanup five seconds. Configure these through the settings in the [API contract](docs/api-contract.md). COORDINATION_SLOTS must be lower than POOL_SIZE. Count both holders and lock waiters toward coordination capacity. Across N workers, allow up to N × POOL_SIZE database connections, plus migration and administration connections. Each worker uses one application engine; additional engines have independent pools and admission limits. Transaction-mode PgBouncer is unsupported.
 
 ## Verification
 

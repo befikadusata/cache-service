@@ -64,8 +64,8 @@ Dependencies identify the required predecessor, rather than requiring every earl
 | B08 | API tests for sample output, invalid types/lengths, empty input, unknown ID, retry and identity policy | Done | B07 | [Payload tests](../tests/test_payloads.py); API coverage reviewed against the contract; 103 tests and Ruff passed, including real PostgreSQL identity/version and retry checks; see B08 acceptance evidence; commit titled `test: complete B08 payload API coverage` on `feat/b08-api-coverage` |
 | B09 | Batch cache reads and request deduplication; persist successful results with versioned keys and authoritative readback | Done | B03, B05, B06 | [Cache flow](../src/cache_service/cache.py), [payload integration](../src/cache_service/payloads.py), [cache tests](../tests/test_cache.py); 116 full-suite tests and Ruff passed against PostgreSQL; personal notes updated; commit titled `feat: add persistent transformation caching` on `feat/b09-transformation-cache` |
 | B10 | One advisory lock at a time, recheck after acquire, same connection for writes; no transaction over external call | Done | B09 | [Cache coordination](../src/cache_service/cache.py), [tests](../tests/test_cache.py); 120 full-suite tests and Ruff passed against PostgreSQL; see B10 evidence below; personal notes updated; commit titled `feat: coordinate transformation misses with advisory locks` on `feat/b10-advisory-coordination` |
-| B11 | Bounded admission and waits, cancellation-safe cleanup, invalidate uncertain ownership; map operational failures to documented HTTP responses | Ready | B10, B04 | B10 complete; basic failure invalidation exists; separate budgets, protected cleanup and operational mapping pending |
-| B12 | Preserve successful transformations on later failure; publish complete payload atomically; verify safe retries | Waiting | B07, B09–B11 | Policy recorded; implementation pending |
+| B11 | Bounded admission and waits, cancellation-safe cleanup, invalidate uncertain ownership; map operational failures to documented HTTP responses | Done | B10, B04 | [Coordination](../src/cache_service/coordination.py), [cache flow](../src/cache_service/cache.py), [tests](../tests/test_coordination.py); 137 full-suite tests and Ruff passed against PostgreSQL; see B11 evidence below; personal notes updated; commit titled `feat: bound cache coordination and protect cleanup` on `feat/b11-bounded-coordination` |
+| B12 | Preserve successful transformations on later failure; publish complete payload atomically; verify safe retries | Ready | B07, B09–B11 | Policy recorded; implementation pending |
 | B13 | Real PostgreSQL tests for timeout, cancellation, saturation, lock loss, collisions, version changes and no open transaction during transform | Waiting | B11, B12 | Controlled synchronization and exact assertions pending |
 | B14 | Multi-process identical and overlapping requests; call counts per distinct string, consistent IDs and restart reuse | Waiting | B12 | Test instrumentation pending; single-process evidence insufficient |
 | B15 | Pydantic Settings CLI parsing; host, repeat and mutually exclusive input source validation; resolve help alias | Waiting | B01 output policy; B04 | Parsing implementation pending |
@@ -118,7 +118,7 @@ The sandbox-only health test stalled and was interrupted; the approved rerun pas
 
 ## Next work and completion gate
 
-B03 runtime verification, B04 contract and model checks, B05 identity helpers, and B06 transformation and composition are complete. B07 payload creation and retrieval and B08 API coverage review are also complete. B09 persistent transformation caching is complete. B10 advisory coordination is also complete. Next implement B11 bounded admission, waits and protected cleanup, then proceed through failure/concurrency evidence, CLI and deployment. B11 prerequisites are complete.
+B03 runtime verification, B04 contract and model checks, B05 identity helpers, and B06 transformation and composition are complete. B07 payload creation and retrieval and B08 API coverage review are also complete. B09 persistent transformation caching is complete. B10 advisory coordination is also complete. B11 bounded admission, waits and protected cleanup is complete. Next is B12 acceptance for partial-success preservation, atomic publication and safe retries, then broader failure/concurrency evidence, CLI and deployment.
 
 Submission is ready only when mandatory behavior, documented reliability guarantees, reproducible setup, and final checks pass; repository history is retained; private material is excluded; video meets the brief; and actual hours are reconciled. B24 remains separate from implementation completion because publishing and sending are delivery actions.
 
@@ -285,3 +285,25 @@ Verification on 2026-10-06:
 Lock acquisition currently uses the ordinary statement timeout. Separate budgets, admission,
 bounded cancellation-protected cleanup, forced ownership-loss tests and multiple-process
 call-count evidence remain B11–B14. No schema migration or dependency change was needed.
+
+
+## B11 acceptance evidence
+
+Verification on 2026-10-06:
+
+- `.venv/bin/ruff check .`: passed.
+- Focused coordination/cache suite: 32 passed against PostgreSQL before two additional acceptance tests.
+- Full suite with TEST_DATABASE_URL derived from masked local Settings: 137 passed, including
+  38 real PostgreSQL tests; one existing upstream TestClient deprecation warning.
+- Initial sandbox-only unit execution stalled in the existing health TestClient test; interrupted.
+  Initial database execution failed under sandbox network restrictions and was interrupted.
+  Approved full execution outside the sandbox resolved both limitations.
+
+Evidence covers validated capacity and finite budgets, admission saturation with spare read
+progress, retryable HTTP 503 with Retry-After, lock waiting without a transformer fallback,
+checkout timeout releasing admission, independent transformer HTTP 504, cancellation and
+uncertain acquisition releasing session ownership, transaction-local settings reverting,
+repeated cancellation protection, and force-close after stalled cleanup. Existing B10 tests
+continue to prove no transaction during transformation and same-session persistence.
+Broader disconnect, crash and multi-process evidence remains B13/B14. Personal learning notes
+and a timeout/cancellation cookbook were updated outside Git.

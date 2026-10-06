@@ -45,11 +45,11 @@ runs without an open transaction while retaining the connection. Persistence and
 readback use that same connection and commit before explicit unlock. Each connection returns
 before the next string begins. On any exception, including acquisition uncertainty or failed
 unlock, invalidate the connection rather than returning possible session ownership to the pool.
-The current acquisition uses the ordinary statement timeout. Separate wait/admission budgets,
-bounded cancellation-protected cleanup and forced connection-loss evidence remain B11–B14.
+B11 uses transaction-local lock and statement timeouts for acquisition, admission below fixed
+pool capacity, an external-operation deadline, and bounded cancellation-protected cleanup.
+Broader forced connection-loss and multi-process evidence remain B13–B14.
 Healthy concurrent sessions now serialize shared misses and reuse committed results.
-Configured overall deadlines and generic error responses are wired; coordinated cleanup and
-capacity guarantees remain future work. PostgreSQL text storage does not support every possible
+Configured overall deadlines and generic error responses are wired; 503 includes Retry-After. PostgreSQL text storage does not support every possible
 Python string, including NUL and lone surrogate values; such storage failures return a generic
 error and never a successful identifier.
 
@@ -115,7 +115,8 @@ Use separate configurable budgets for admission, checkout, advisory waiting, tra
 
 Use a blocking advisory acquisition with a transaction-local lock timeout. The statement timeout for that acquisition must permit the intended wait. Scope settings to the transaction so pooled connections do not leak configuration. The wait budget should normally accommodate transformation and persistence plus margin; it is not a correctness dependency. Lock-wait timeout limits waiting, not ownership duration. See [PostgreSQL timeout settings](https://www.postgresql.org/docs/current/runtime-config-client.html).
 
-Never fall back to uncoordinated transformation after a lock timeout. Return 503 for admission, pool, lock-wait, or database unavailability; return 504 for transformer or overall-generation timeout; return 502 for an external transformation failure. Retry guidance should be explicit. Internal invariant or digest-collision failures return a generic server error and are logged without exposing raw input. Initial input and overall deadline defaults are defined in the [API contract](api-contract.md). Coordination budgets will be selected with the first integration measurements.
+Never fall back to uncoordinated transformation after a lock timeout. Return 503 for admission, pool, lock-wait, or database unavailability; return 504 for transformer or overall-generation timeout; return 502 for an external transformation failure. Retry guidance should be explicit. Internal invariant or digest-collision failures return a generic server error and are logged without exposing raw input. Initial input and overall deadline defaults are defined in the [API contract](api-contract.md). Initial B11 budgets are listed in the API contract; synthetic timeout and recovery tests verify
+mechanics rather than establish production performance.
 
 ## Deployment and guarantees
 
@@ -134,3 +135,23 @@ Prove API behavior, restart persistence, multi-process coordination, overlapping
 ## Changes requiring a design review
 
 Parallelizing strings requires revisiting capacity and connection ownership. Bulk lock acquisition requires ordering actual lock keys. Transaction-mode pooling requires a different coordination mechanism. A future requirement for output-based identity or filesystem payload storage would require revisiting the selected identity and persistence decisions.
+
+
+## B11 implementation trace
+
+`create_engine` attaches one `Coordination` instance to engine execution options. Its semaphore
+is shared by every cache operation using that application engine. Admission ends before checkout
+begins; admission remains held through cleanup. No extra connection is acquired while a lock is
+held. Pool overflow stays disabled and configured slots must leave at least one spare connection.
+
+`cache.py` sets transaction-local lock_timeout and statement_timeout before acquiring one key.
+The cache recheck and insertion retain their short transaction boundaries. Each transformer call
+has an independent timeout; the outer POST timeout still limits total generation.
+
+`coordination.py` owns release and disposal. Success unlocks and closes. Any interrupted body,
+including uncertain acquisition, invalidates the physical connection instead of pooling it.
+A separate cleanup task is shielded and awaited even after repeated request cancellation.
+Half the cleanup budget allows graceful cleanup; if that fails, the captured asyncpg driver
+socket is synchronously terminated and the remaining half bounds invalidation and close.
+A failed or unconfirmed unlock returns 503. The admission slot releases after disposal finishes.
+The force-close path deliberately depends on the selected asyncpg driver.
