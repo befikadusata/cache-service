@@ -70,6 +70,6 @@ TEST_DATABASE_URL=postgresql+asyncpg://cache:local-development-only@localhost:54
 
 The integration test requires migrations to have been applied. It exercises actual API readiness against PostgreSQL. Without `TEST_DATABASE_URL`, it skips explicitly. No test drops or recreates a database.
 
-Foundation verification in the assessment workspace: Python compilation and Compose configuration validation passed. Dependency resolution could not complete because outbound DNS/network access is restricted; Docker daemon access and local PostgreSQL listening sockets are also restricted. Therefore runtime tests, migrations against a live server, and image builds remain unverified. A dependency lockfile will be generated when package resolution is available.
+Foundation verification passed on 2026-10-06: dependency resolution and `uv.lock` generation, Ruff, all three foundation tests (including real PostgreSQL readiness), Docker image build, clean migration revision `0001`, and both health endpoints. Approved execution outside the sandbox was required. If port 5432 is occupied, use `CACHE_DATABASE_PORT=55432 docker compose up --build -d` and point local database URLs at port 55432. Docker currently installs the version ranges from `pyproject.toml`; the local uv environment uses the lockfile.
 
 The migration environment follows [Alembic's async migration recipe](https://alembic.sqlalchemy.org/en/latest/cookbook.html#using-asyncio-with-alembic). Migrations run explicitly; API workers do not create tables during startup.

@@ -55,8 +55,8 @@ Dependencies identify the required predecessor, rather than requiring every earl
 | ID | Work and acceptance evidence | Status | Dependencies | Current artifacts or evidence |
 | --- | --- | --- | --- | --- |
 | B01 | Record author response, identity/storage choices and transformer assumption; resolve CLI flag conflict and output format | Ready | None | Author delegated identity/storage; [README assumptions](../README.md#assessment-assumptions) recorded; uppercase assumption and help alias documented; CLI output format pending |
-| B02 | Application lifecycle, PostgreSQL configuration, migration and Compose; inspect setup artifacts | Written | None | [Application](../src/cache_service/main.py), [migration](../migrations/versions/0001_initial.py), [Compose](../compose.yaml); commit `6a492e7` |
-| B03 | Install dependencies, generate lockfile, run lint and foundation tests, apply clean migration, check both health endpoints and image startup | Blocked | B02; execution/network access | Syntax and Compose config passed; runtime checks blocked; see verification record below |
+| B02 | Application lifecycle, PostgreSQL configuration, migration and Compose; inspect setup artifacts | Done | None | [Application](../src/cache_service/main.py), [migration](../migrations/versions/0001_initial.py), [Compose](../compose.yaml); commit `6a492e7` |
+| B03 | Install dependencies, generate lockfile, run lint and foundation tests, apply clean migration, check both health endpoints and image startup | Done | B02; execution/network access | Runtime checks passed on 2026-10-06; `uv.lock` generated; PostgreSQL host port 55432; see verification record below; personal notes updated |
 | B04 | Freeze POST and GET response schemas, strict input validation, empty behavior, configurable limits and request deadlines | Ready | Selected B01 assumptions | POST identifier field and status, malformed ID behavior, bounds and deadlines still to specify |
 | B05 | Define canonical encoding, version and digest identities; verify list boundaries, order, whitespace and collision handling | Ready | B04 | Design in [architecture](architecture.md); implementation pending |
 | B06 | Replaceable uppercase transformer and alternating composition; meaningful isolated tests | Ready | B04 | Sample output and empty input policy in requirements |
@@ -91,7 +91,20 @@ Dependencies identify the required predecessor, rather than requiring every earl
 | Docker daemon access | Permission denied | Build and startup unverified |
 | Local PostgreSQL startup | Sandbox denied listening socket | Migration and database integration unverified |
 
-Record successful runtime commands, environment and outcomes here when access is available. Do not replace blocked results with success based on artifact inspection.
+The blocked results above are historical sandbox attempts. On 2026-10-06, approved execution outside the sandbox produced the following runtime evidence:
+
+| Check | Result |
+| --- | --- |
+| `uv sync` | Passed; `uv.lock` generated; local Python 3.14.6 |
+| `.venv/bin/ruff check .` | Passed |
+| `.venv/bin/pytest -m 'not integration'` | 2 passed, 1 deselected |
+| `docker compose up --build -d` | Image build passed; startup failed because host port 5432 was occupied |
+| `CACHE_DATABASE_PORT=55432 docker compose up -d` | Passed against newly created PostgreSQL 17 volume; API started using Python 3.12 image |
+| Full `.venv/bin/pytest` with `TEST_DATABASE_URL` on port 55432 | 3 passed, including real PostgreSQL readiness; one upstream TestClient deprecation warning |
+| `SELECT version_num FROM alembic_version` | Revision `0001` applied |
+| HTTP `/health/live` and `/health/ready` on port 8000 | Both returned HTTP 200 and `{"status":"ok"}` |
+
+The sandbox-only health test stalled and was interrupted; the approved rerun passed. These checks verify the foundation, not the unimplemented payload or caching behavior.
 
 ## Development evidence
 
@@ -104,6 +117,6 @@ Record successful runtime commands, environment and outcomes here when access is
 
 ## Next work and completion gate
 
-Resolve B03 runtime verification first. B04–B06 can be refined independently while access is blocked. Then implement the payload flow and proceed through cache coordination, CLI and deployment evidence.
+B03 runtime verification is complete. Next refine B04–B06, then implement the payload flow and proceed through cache coordination, CLI and deployment evidence.
 
 Submission is ready only when mandatory behavior, documented reliability guarantees, reproducible setup, and final checks pass; repository history is retained; private material is excluded; video meets the brief; and actual hours are reconciled. B24 remains separate from implementation completion because publishing and sending are delivery actions.
