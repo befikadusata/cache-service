@@ -2,6 +2,8 @@
 
 Build in reviewable stages, with working behavior and verification developed together. The selected design is PostgreSQL, SQLAlchemy 2.x async access, per-string session advisory locks, and independent persistence of successful transformations. Follow the contracts in the architecture document during implementation.
 
+Track current status, dependencies, requirement coverage, and executed evidence in the [implementation and submission backlog](backlog.md). Update it with each implementation change. This plan describes stage order; the backlog owns completion status.
+
 ## Stage 1 Requirements and design
 
 Reconcile any task-author responses with the acceptance criteria. Database, coordination, transaction, versioning, and partial-success decisions are recorded. Finalize the provisional identity and storage interpretation if clarification arrives. Specify API response schemas, canonical encoding, input limits, CLI output format, and initial configurable timeout and capacity values before their implementation.
