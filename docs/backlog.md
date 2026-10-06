@@ -12,6 +12,24 @@ This backlog tracks the assessment from requirements through submission. It is t
 
 For each implementation change, update the affected item, add code or test links and the commit, and record executed verification. Keep failed checks visible until resolved. A commit alone does not prove acceptance. Any changed requirement must update its mapped items and tests. Use the current provisional interpretations until the task author replies; confirmation is not required to make independent progress.
 
+## Personal preparation alongside implementation
+
+Personal preparation lives at `../private-preparation/`, resolved relative to the `cache-service/` repository root. It is a sibling directory outside Git. Personal content must stay there; public documentation retains the technical reasoning needed to maintain the service.
+
+When a work item introduces a consequential decision, an unfamiliar concept, a failure mechanism, or a likely live modification, write or update the relevant personal material in the same development step. Routine changes do not need duplicate notes. Keep explanations consistent with the current code and revise them when the design changes.
+
+| Trigger and work items | Personal destination | Required content when applicable |
+| --- | --- | --- |
+| Alternatives, identity, versioning and architecture decisions; B01, B04–B05, B09–B12 | `../private-preparation/learning/design-options.md` | Alternatives, trade-offs, selected rationale, limitations and reasons to reconsider |
+| Foundation and setup; B02–B03 | `../private-preparation/learning/foundation.md` | Lifecycle, migrations, connections and actual verification limits |
+| New request flow, caching, concurrency or CLI concepts; B06–B17 | `../private-preparation/learning/` | Plain-language execution trace, important code references and failure behavior |
+| Debugging, operational checks or likely live changes; B03, B11, B13–B14, B17–B18 | `../private-preparation/cookbooks/` | Reproducible exercise, expected result, explanation and recovery steps |
+| Collaboration preferences or AI working instructions change | `../private-preparation/instructions/working-agreement.md` | Updated working rules and personal preferences |
+| Explanation practice, final review and video; B19–B22 | `../private-preparation/interview/` | Walkthrough outline, defense questions and live-change rehearsal |
+| Actual hours and submission preparation; B23–B24 | `../private-preparation/` | Honest time log and private submission preparation; no invented historical totals |
+
+Before closing an applicable item, check that its personal explanation reflects the implemented behavior and can support a code walkthrough. Track completion here only at the level of “personal notes updated”; do not copy personal content into this public backlog. Private preparation is a collaboration requirement, not an additional assessment requirement.
+
 ## Requirement coverage
 
 | ID | Assessment requirement | Work items |
