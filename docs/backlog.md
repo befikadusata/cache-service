@@ -54,7 +54,7 @@ Dependencies identify the required predecessor, rather than requiring every earl
 
 | ID | Work and acceptance evidence | Status | Dependencies | Current artifacts or evidence |
 | --- | --- | --- | --- | --- |
-| B01 | Record author response, identity/storage choices and transformer assumption; resolve CLI flag conflict and output format | Done | None | Author delegated identity/storage; [README assumptions](../README.md#assessment-assumptions) and [planned CLI policy](../README.md#planned-cli-policy) recorded; JSON Lines selected; documentation consistency and `git diff --check` passed; personal notes updated; commit titled `feat: define CLI JSON Lines output policy` on `feat/b01-cli-output-policy` |
+| B01 | Record author response, identity/storage choices and transformer assumption; resolve CLI flag conflict and output format | Done | None | Author delegated identity/storage; [README assumptions](../README.md#assessment-assumptions) and [CLI policy](../README.md#cli-usage) recorded; JSON Lines selected; documentation consistency and `git diff --check` passed; personal notes updated; commit titled `feat: define CLI JSON Lines output policy` on `feat/b01-cli-output-policy` |
 | B02 | Application lifecycle, PostgreSQL configuration, migration and Compose; inspect setup artifacts | Done | None | [Application](../src/cache_service/main.py), [migration](../migrations/versions/0001_initial.py), [Compose](../compose.yaml); commit `6a492e7` |
 | B03 | Install dependencies, generate lockfile, run lint and foundation tests, apply clean migration, check both health endpoints and image startup | Done | B02; execution/network access | Runtime checks passed on 2026-10-06; `uv.lock` generated; PostgreSQL host port 55432; see verification record below; personal notes updated |
 | B04 | Freeze POST and GET response schemas, strict input validation, empty behavior, configurable limits and request deadlines | Done | Selected B01 assumptions | [Contract](api-contract.md), [models](../src/cache_service/schemas.py), [settings](../src/cache_service/config.py), [tests](../tests/test_schemas.py); 18 focused tests and Ruff passed; personal notes updated; commit titled `Define payload API contract and validation`. Endpoint enforcement remains B07/B11 |
@@ -69,8 +69,8 @@ Dependencies identify the required predecessor, rather than requiring every earl
 | B13 | Real PostgreSQL tests for timeout, cancellation, saturation, lock loss, collisions, version changes and no open transaction during transform | Done | B11, B12 | [Coordination tests](../tests/test_coordination.py), [cache tests](../tests/test_cache.py), [payload tests](../tests/test_payloads.py); 21 focused tests, 146 full-suite tests and Ruff passed against PostgreSQL; see B13 evidence below; personal notes updated; commit titled `feat: verify PostgreSQL coordination failure recovery` on `feat/b13-postgresql-failure-evidence` |
 | B14 | Multi-process identical and overlapping requests; call counts per distinct string, consistent IDs and restart reuse | Done | B12 | [Separate-process tests](../tests/test_multiprocess.py); two focused cases and 148 full-suite tests passed against PostgreSQL; Ruff passed; see B14 evidence below; personal notes updated; commit titled `feat: verify multi-process cache coordination` on `feat/b14-multiprocess-concurrency` |
 | B15 | Pydantic Settings CLI parsing; host, repeat and mutually exclusive input source validation; resolve help alias | Done | B01 output policy; B04 | [Parser](../src/cache_service/cli.py), [tests](../tests/test_cli.py); 24 focused tests, 123 unit tests and Ruff passed; see B15 evidence below; personal notes updated; commit titled `feat: add CLI argument parsing and validation` on `feat/b15-cli-parsing` |
-| B16 | CLI create/read loop, file/stdin/JSON input, file/stdout output, stderr diagnostics and nonzero failure exit | Ready | B07, B15 | Prerequisites complete; execution implementation pending |
-| B17 | CLI parsing and I/O tests plus a real-service integration scenario | Waiting | B16 | Tests pending |
+| B16 | CLI create/read loop, file/stdin/JSON input, file/stdout output, stderr diagnostics and nonzero failure exit | Done | B07, B15 | [Executable](../src/cache_service/cli.py), [execution tests](../tests/test_cli_execution.py), [usage](../README.md#cli-usage); 49 focused CLI tests, 148 unit tests and Ruff passed; see B16 evidence below; personal notes updated; commit titled `Add CLI execution and JSON Lines output` on `feat/b16-cli-execution` |
+| B17 | CLI parsing and I/O tests plus a real-service integration scenario | Ready | B16 | Parsing and focused execution tests exist; broader coverage review and real-service evidence pending |
 | B18 | Clean Docker build and migration/start smoke test; storage reuse after restart; document supported worker/connection budget | Waiting | B03, B12, B17 | Compose exists; runtime deployment evidence pending |
 | B19 | Complete public setup, usage, configuration, architecture and limitations; reconcile every guarantee with tests | Waiting | B14, B17, B18 | Public docs exist; final usage and evidence pending |
 | B20 | Final code review and requirement audit; full required suite passes; remove unnecessary complexity and inspect repository contents | Waiting | B13, B14, B17–B19 | Final review pending |
@@ -120,8 +120,8 @@ The sandbox-only health test stalled and was interrupted; the approved rerun pas
 
 B03–B14 are complete, including partial-success preservation, atomic publication, safe retries,
 controlled PostgreSQL failure recovery and separate-process coordination. B01 CLI output
-policy and B15 CLI parsing are complete. Next is B16 CLI execution, then B17 CLI tests
-and B18 deployment.
+policy, B15 CLI parsing and B16 CLI execution are complete. Next is B17 broader CLI
+verification and real-service integration, then B18 deployment.
 
 Submission is ready only when mandatory behavior, documented reliability guarantees, reproducible setup, and final checks pass; repository history is retained; private material is excluded; video meets the brief; and actual hours are reconciled. B24 remains separate from implementation completion because publishing and sending are delivery actions.
 
@@ -404,4 +404,26 @@ The parser uses Pydantic Settings without loading API/database configuration. It
 validated options, preserves input contents for B16, and does no HTTP or file I/O.
 Help exits successfully; parser and value errors remain exceptions for B16's entry point
 to map to stderr and a nonzero exit. No dependencies or lockfile changes were needed.
+Personal CLI learning notes updated outside Git.
+
+
+## B16 acceptance evidence
+
+Verification on 2026-10-07:
+
+| Check | Result and scope |
+| --- | --- |
+| `uv lock --offline` and `uv sync --locked --offline` | Sandbox cache access denied; approved rerun passed; HTTPX promoted to runtime dependency, lockfile synchronized and executable installed |
+| `.venv/bin/pytest tests/test_cli.py tests/test_cli_execution.py -q` | 49 passed: argument parsing plus mocked create/read repeats, path prefix, all input sources, file overwrite, same input/output path, empty output, newline escaping, input/HTTP/response/network/file/flush failures and earlier-record preservation |
+| `.venv/bin/pytest -m 'not integration' -q` | Sandbox run stalled and was interrupted; approved rerun passed with 144 tests; final rerun after four added edge cases passed with 148 tests, 49 integration cases deselected; one existing upstream TestClient deprecation warning |
+| `.venv/bin/ruff check .` | Passed |
+| `.venv/bin/cache-service --help` | Passed; installed executable exposes all options and exits successfully |
+| `git diff --check` | Passed |
+
+Input is read and validated once before output is opened. Each iteration performs POST then GET
+and flushes a JSON Lines record only after both responses validate. Errors produce safe stderr
+diagnostics and a nonzero exit. One synchronous HTTP client serves the sequential loop, with
+explicit connect/write/pool/read timeouts and no automatic retries. Local input limits use API
+defaults; output files overwrite. README documents these policies and failure limitations.
+Focused HTTP tests use MockTransport; actual service execution remains B17 evidence.
 Personal CLI learning notes updated outside Git.
