@@ -70,8 +70,8 @@ Dependencies identify the required predecessor, rather than requiring every earl
 | B14 | Multi-process identical and overlapping requests; call counts per distinct string, consistent IDs and restart reuse | Done | B12 | [Separate-process tests](../tests/test_multiprocess.py); two focused cases and 148 full-suite tests passed against PostgreSQL; Ruff passed; see B14 evidence below; personal notes updated; commit titled `feat: verify multi-process cache coordination` on `feat/b14-multiprocess-concurrency` |
 | B15 | Pydantic Settings CLI parsing; host, repeat and mutually exclusive input source validation; resolve help alias | Done | B01 output policy; B04 | [Parser](../src/cache_service/cli.py), [tests](../tests/test_cli.py); 24 focused tests, 123 unit tests and Ruff passed; see B15 evidence below; personal notes updated; commit titled `feat: add CLI argument parsing and validation` on `feat/b15-cli-parsing` |
 | B16 | CLI create/read loop, file/stdin/JSON input, file/stdout output, stderr diagnostics and nonzero failure exit | Done | B07, B15 | [Executable](../src/cache_service/cli.py), [execution tests](../tests/test_cli_execution.py), [usage](../README.md#cli-usage); 49 focused CLI tests, 148 unit tests and Ruff passed; see B16 evidence below; personal notes updated; commit titled `Add CLI execution and JSON Lines output` on `feat/b16-cli-execution` |
-| B17 | CLI parsing and I/O tests plus a real-service integration scenario | Ready | B16 | Parsing and focused execution tests exist; broader coverage review and real-service evidence pending |
-| B18 | Clean Docker build and migration/start smoke test; storage reuse after restart; document supported worker/connection budget | Waiting | B03, B12, B17 | Compose exists; runtime deployment evidence pending |
+| B17 | CLI parsing and I/O tests plus a real-service integration scenario | Done | B16 | [CLI tests](../tests/test_cli_execution.py), [live-service tests](../tests/test_cli_integration.py), [verification](verification.md#cli-evidence); two focused live-service cases and 201 full-suite tests passed against PostgreSQL; Ruff passed; personal notes updated; commit titled `Verify CLI against live API and PostgreSQL` on `feat/b17-cli-verification` |
+| B18 | Clean Docker build and migration/start smoke test; storage reuse after restart; document supported worker/connection budget | Ready | B03, B12, B17 | Prerequisites complete; Compose exists; runtime deployment evidence pending |
 | B19 | Complete public setup, usage, configuration, architecture and limitations; reconcile every guarantee with tests | Waiting | B14, B17, B18 | Public docs exist; final usage and evidence pending |
 | B20 | Final code review and requirement audit; full required suite passes; remove unnecessary complexity and inspect repository contents | Waiting | B13, B14, B17–B19 | Final review pending |
 | B21 | Preserve real incremental commits; verify neutral repository name and public artifacts contain no personal preparation or secrets | Ready | Ongoing; final audit B20 | Development commits recorded below; private preparation is outside repository; credential configuration hardened and personal notes updated |
@@ -120,8 +120,8 @@ The sandbox-only health test stalled and was interrupted; the approved rerun pas
 
 B03–B14 are complete, including partial-success preservation, atomic publication, safe retries,
 controlled PostgreSQL failure recovery and separate-process coordination. B01 CLI output
-policy, B15 CLI parsing and B16 CLI execution are complete. Next is B17 broader CLI
-verification and real-service integration, then B18 deployment.
+policy, B15 CLI parsing, B16 CLI execution and B17 live-service verification are complete.
+Next is B18 deployment verification.
 
 Submission is ready only when mandatory behavior, documented reliability guarantees, reproducible setup, and final checks pass; repository history is retained; private material is excluded; video meets the brief; and actual hours are reconciled. B24 remains separate from implementation completion because publishing and sending are delivery actions.
 
@@ -427,3 +427,26 @@ explicit connect/write/pool/read timeouts and no automatic retries. Local input 
 defaults; output files overwrite. README documents these policies and failure limitations.
 Focused HTTP tests use MockTransport; actual service execution remains B17 evidence.
 Personal CLI learning notes updated outside Git.
+
+
+## B17 acceptance evidence
+
+Verification on 2026-10-07:
+
+| Check | Result and scope |
+| --- | --- |
+| Existing Compose database status | PostgreSQL 17 healthy on local port 55432; Docker socket denied in sandbox, approved read-only check passed |
+| `.venv/bin/pytest tests/test_cli_integration.py -q` with `TEST_DATABASE_URL` | Approved execution passed: 2 live-service tests using a temporary Uvicorn server, installed CLI subprocesses and actual migrated PostgreSQL |
+| Full `.venv/bin/pytest -q` with `TEST_DATABASE_URL` | Approved execution passed: 201 tests, including all unit and PostgreSQL integration tests; one existing upstream TestClient deprecation warning |
+| `.venv/bin/ruff check .` | Passed |
+| `git diff --check` | Passed |
+
+The database URL was obtained from masked application settings and supplied through the test
+process environment without printing it. Each live-service fixture uses an isolated transformer
+version and deletes only its own rows. CLI subprocess environments omit database configuration.
+Coverage includes every input/output mode, repeated-ID reuse across subprocesses, actual UTF-8
+and newline encoding, minimized calls for duplicated strings, independently verified committed
+storage, real HTTP 502 diagnostics, nonzero exit and preserved partial success. Unit coverage
+also explicitly checks interrupt status and rejects invalid input before constructing a client.
+The existing CI integration command discovers these tests without workflow changes; no hosted
+B17 run has been observed yet. Docker deployment evidence remains B18. Personal notes updated.

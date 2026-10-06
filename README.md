@@ -100,7 +100,8 @@ output while allowing incremental consumption without buffering a single JSON ar
 Argument, input, file, network, HTTP-status and malformed-response errors exit with status 1;
 an interrupt exits with status 130. Diagnostics omit raw input, response bodies and credentials.
 If an output write fails, the final record may be incomplete; a server-side creation may already
-have committed even when the CLI reports failure. B17 will add real-service CLI evidence.
+have committed even when the CLI reports failure. B17 verifies the installed executable
+against a live Uvicorn API and PostgreSQL; see [CLI evidence](docs/verification.md#cli-evidence).
 
 ## Engineering documentation
 

@@ -190,3 +190,22 @@ def test_output_flush_failure_stops_requests(monkeypatch, mock_http, capsys):
     assert main(["--json", PAYLOAD, "--repeat", "2"]) == 1
     assert calls == ["POST", "GET"]
     assert "Cannot write output" in capsys.readouterr().err
+
+
+def test_invalid_input_does_not_construct_http_client(monkeypatch):
+    def unexpected_client(*args, **kwargs):
+        pytest.fail("Invalid input must fail before constructing an HTTP client")
+
+    monkeypatch.setattr(httpx, "Client", unexpected_client)
+    assert main(["--json", "invalid"]) == 1
+
+
+def test_interrupt_returns_130(mock_http, capsys):
+    def handler(request):
+        raise KeyboardInterrupt
+
+    mock_http(handler)
+    assert main(["--json", PAYLOAD]) == 130
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "cache-service: Interrupted\n"
