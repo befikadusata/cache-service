@@ -60,8 +60,8 @@ Dependencies identify the required predecessor, rather than requiring every earl
 | B04 | Freeze POST and GET response schemas, strict input validation, empty behavior, configurable limits and request deadlines | Done | Selected B01 assumptions | [Contract](api-contract.md), [models](../src/cache_service/schemas.py), [settings](../src/cache_service/config.py), [tests](../tests/test_schemas.py); 18 focused tests and Ruff passed; personal notes updated; commit titled `Define payload API contract and validation`. Endpoint enforcement remains B07/B11 |
 | B05 | Define canonical encoding, version and digest identities; verify list boundaries, order, whitespace and collision handling | Done | B04 | [Identity helpers](../src/cache_service/identity.py), [tests](../tests/test_identity.py), exact format in [architecture](architecture.md); 18 focused tests and 44 unit tests passed; personal notes updated; commit titled `Add versioned input identities` on `feat/versioned-identities` |
 | B06 | Replaceable uppercase transformer and alternating composition; meaningful isolated tests | Done | B04 | [Transformer and composition](../src/cache_service/transformation.py), [tests](../tests/test_transformation.py); 21 focused tests, 65 unit tests and Ruff passed; personal notes updated; commit titled `feat: add replaceable transformer and payload composition` on `feat/b06-transformer-composition` |
-| B07 | Create and read complete payloads; generated UUID plus unique input digest; duplicate creation returns stored ID | Ready | B03–B06 | Initial schema written; predecessors complete; request flow pending |
-| B08 | API tests for sample output, invalid types/lengths, empty input, unknown ID, retry and identity policy | Waiting | B07 | [Verification scenarios](verification.md) |
+| B07 | Create and read complete payloads; generated UUID plus unique input digest; duplicate creation returns stored ID | Done | B03–B06 | [Payload flow](../src/cache_service/payloads.py), [routes](../src/cache_service/main.py), [tests](../tests/test_payloads.py); 80 tests and Ruff passed, including real PostgreSQL publication races and restart reuse; personal notes updated; commit titled `feat: add payload creation and retrieval` on `feat/b07-payload-endpoints` |
+| B08 | API tests for sample output, invalid types/lengths, empty input, unknown ID, retry and identity policy | Ready | B07 | Basic scenarios implemented alongside B07 in [payload tests](../tests/test_payloads.py); broader API coverage review remains |
 | B09 | Batch cache reads and request deduplication; persist successful results with versioned keys and authoritative readback | Ready | B03, B05, B06 | Predecessors complete; implementation pending |
 | B10 | One advisory lock at a time, recheck after acquire, same connection for writes; no transaction over external call | Waiting | B09 | Coordination design recorded; implementation pending |
 | B11 | Bounded admission and waits, cancellation-safe cleanup, invalidate uncertain ownership; map operational failures to documented HTTP responses | Waiting | B10, B04 | Numeric budgets and cleanup code pending |
@@ -118,7 +118,7 @@ The sandbox-only health test stalled and was interrupted; the approved rerun pas
 
 ## Next work and completion gate
 
-B03 runtime verification, B04 contract and model checks, B05 identity helpers, and B06 transformation and composition are complete. Next implement B07 payload creation and retrieval, then proceed through cache coordination, CLI and deployment evidence. B09 prerequisites are also complete.
+B03 runtime verification, B04 contract and model checks, B05 identity helpers, and B06 transformation and composition are complete. B07 payload creation and retrieval are also complete. Next review B08 API coverage and implement B09 transformation caching, then proceed through cache coordination, CLI and deployment evidence. B09 prerequisites are complete.
 
 Submission is ready only when mandatory behavior, documented reliability guarantees, reproducible setup, and final checks pass; repository history is retained; private material is excluded; video meets the brief; and actual hours are reconciled. B24 remains separate from implementation completion because publishing and sending are delivery actions.
 
@@ -184,3 +184,25 @@ Hosted CI run `37461260126` failed during container creation: GitHub runner argu
 On 2026-10-06, `.venv/bin/pytest tests/test_identity.py -q` passed 18 tests. Fixed vectors verify canonical JSON, SHA-256 digests and stable signed advisory keys. Additional checks cover exact input distinctions, empty inputs, Unicode without normalization, version changes, and simulated digest and advisory-key collisions. Retained identity comparisons reject mismatches with fixed messages containing no input. The existing migration already matches these 32-byte keys; no schema change was needed.
 
 The full `.venv/bin/pytest -m 'not integration' -q` suite initially stalled in the sandbox health test and was interrupted. The approved rerun passed 44 tests with one integration test deselected and the existing upstream Starlette TestClient deprecation warning. `.venv/bin/ruff check .` and `git diff --check` passed. Personal design notes updated. Recorded in the commit titled `Add versioned input identities` on `feat/versioned-identities`. These checks establish pure identity behavior; persistence readback, HTTP error mapping and real advisory coordination remain later work.
+
+## B07 acceptance evidence
+
+On 2026-10-06, branch `feat/b07-payload-endpoints` implements POST/GET payload routes,
+configured strict validation, replacement transformer injection, overall request deadlines,
+immutable complete-output publication, identity verification and generic operational responses.
+The existing migration supports this flow; no schema change is needed.
+
+| Check | Result and scope |
+| --- | --- |
+| `.venv/bin/pytest tests/test_payloads.py -m 'not integration' -q` | 6 passed, 5 deselected at that stage; input rejection and configured lower limits |
+| Focused payload integration tests with local `TEST_DATABASE_URL` | Initial sandbox run failed because socket creation was denied; approved rerun passed all 5 tests present at that stage |
+| Full `.venv/bin/pytest -q --tb=short` with local `TEST_DATABASE_URL` | 80 passed, including 8 payload integration tests and foundation readiness; one existing upstream TestClient deprecation warning |
+| `.venv/bin/ruff check .` and `git diff --check` | Passed |
+
+PostgreSQL evidence covers alternating output, empty output/elements, ID reuse, distinct-input
+identity, fresh application/pool reuse, synchronized competing publication, retained identity
+collisions during both lookup and publication, no payload on transformer failure or generation
+deadline, successful retry, and configured limits above defaults. Concurrent misses still repeat
+transformation: no per-string cache or advisory-lock guarantee is claimed in B07. B08 retains
+its separate API coverage review; B09–B14 retain caching and coordination work. Personal request
+flow notes updated outside Git. Recorded in commit titled `feat: add payload creation and retrieval`.

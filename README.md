@@ -4,7 +4,31 @@ A FastAPI service that transforms two lists of strings, interleaves their result
 
 ## Project status
 
-Runnable foundation added: application lifecycle, health endpoints, database configuration, initial migration, and Docker Compose. Payload endpoints, transformation caching, and CLI are not implemented yet.
+The foundation and payload endpoints are implemented: strict validation, uppercase transformation,
+alternating composition, PostgreSQL storage, and reuse of identifiers for identical inputs.
+Per-string transformation caching, worker coordination, and the CLI remain planned work.
+
+## Payload API
+
+Create a payload:
+
+```sh
+curl -sS http://localhost:8000/payloads \
+  -H 'Content-Type: application/json' \
+  -d '{"list1":["hello","world"],"list2":["one","two"]}'
+```
+
+The response is `{"id":"<uuid>"}`. Read it with
+`curl -sS http://localhost:8000/payloads/<uuid>` to obtain
+`{"output":"HELLO, ONE, WORLD, TWO"}`. Repeating identical ordered input under the same
+transformer version returns the stored identifier, including after application restart.
+Concurrent publication also returns the stored winner's identifier; concurrent misses can
+still repeat transformation until coordination is implemented.
+
+Both lists must contain strings and have equal lengths. Two empty lists produce an empty
+output. Unknown UUIDs return 404, and invalid input returns 422. Configurable input limits,
+deadlines, and error responses are described in the [API contract](docs/api-contract.md).
+Only complete outputs are published; successful individual transformations are not yet cached.
 
 ## Assessment assumptions
 
@@ -70,7 +94,10 @@ uv run pytest -m 'not integration'
 uv run python -c 'import os, subprocess, sys; from cache_service.config import Settings; os.environ["TEST_DATABASE_URL"] = Settings().database_url.get_secret_value(); raise SystemExit(subprocess.call([sys.executable, "-m", "pytest", "-m", "integration"]))'
 ```
 
-The integration test requires migrations to have been applied. It exercises actual API readiness against PostgreSQL. Without `TEST_DATABASE_URL`, it skips explicitly. No test drops or recreates a database.
+Integration tests require migrations to have been applied. They exercise readiness and payload
+creation, reads, reuse, restart, publication conflicts, collisions, failure, and deadlines against
+PostgreSQL. Without `TEST_DATABASE_URL`, they skip explicitly. Payload tests remove their own
+uniquely marked rows; no test drops or recreates a database.
 
 Foundation verification passed on 2026-10-06: dependency resolution and `uv.lock` generation, Ruff, all three foundation tests (including real PostgreSQL readiness), Docker image build, clean migration revision `0001`, and both health endpoints. Approved execution outside the sandbox was required. If port 5432 is occupied, use `DB_PORT=55432 docker compose up --build -d` and point local database URLs at port 55432. Docker currently installs the version ranges from `pyproject.toml`; the local uv environment uses the lockfile.
 
