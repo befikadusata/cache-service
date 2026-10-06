@@ -73,9 +73,9 @@ Dependencies identify the required predecessor, rather than requiring every earl
 | B17 | CLI parsing and I/O tests plus a real-service integration scenario | Done | B16 | [CLI tests](../tests/test_cli_execution.py), [live-service tests](../tests/test_cli_integration.py), [verification](verification.md#cli-evidence); two focused live-service cases and 201 full-suite tests passed against PostgreSQL; Ruff passed; personal notes updated; commit titled `Verify CLI against live API and PostgreSQL` on `feat/b17-cli-verification` |
 | B18 | Clean Docker build and migration/start smoke test; storage reuse after restart; document supported worker/connection budget | Done | B03, B12, B17 | [Deployment smoke script](../scripts/verify_deployment.py), [procedure](verification.md#docker-deployment), worker/connection guidance in README and architecture; all runtime checks and Ruff passed on 2026-10-07; see B18 evidence below; personal notes updated; commit titled `Verify Docker deployment and restart persistence` |
 | B19 | Complete public setup, usage, configuration, architecture and limitations; reconcile every guarantee with tests | Done | B14, B17, B18 | [Configuration](configuration.md), [guarantee evidence](verification.md#guarantee-evidence), README, API contract and architecture reconciled with current code/tests; documentation checks, CLI help, Ruff and whitespace checks passed; see B19 evidence below; personal notes updated |
-| B20 | Final code review and requirement audit; full required suite passes; remove unnecessary complexity and inspect repository contents | Ready | B13, B14, B17–B19 | Final review pending |
+| B20 | Final code review and requirement audit; full required suite passes; remove unnecessary complexity and inspect repository contents | Done | B13, B14, B17–B19 | [Final review](final-review.md); new real PostgreSQL GET-deadline/cleanup/retry test; 202 full-suite tests, Ruff, whitespace, locked dependency check, Compose validation and Docker build passed; tracked-file inspection passed; personal notes updated |
 | B21 | Preserve real incremental commits; verify neutral repository name and public artifacts contain no personal preparation or secrets | Ready | Ongoing; final audit B20 | Development commits recorded below; private preparation is outside repository; credential configuration hardened and personal notes updated |
-| B22 | Prepare and record English walkthrough with camera and screen, code trace, CLI and tests; verify duration at most 15 minutes | Waiting | B20 | Personal rehearsal remains in sibling private workspace; candidate records video |
+| B22 | Prepare and record English walkthrough with camera and screen, code trace, CLI and tests; verify duration at most 15 minutes | Ready | B20 | Personal rehearsal remains in sibling private workspace; candidate records video |
 | B23 | Track actual time from available records; candidate reconciles previous work; report honest total without estimating missing history as fact | Ready | Ongoing | No authoritative total yet; candidate confirmation required |
 | B24 | Create/publish neutral public repository and video, verify both links, draft reply with actual hours, submit when explicitly authorized | Waiting | B20–B23 | No public repository, video or submission yet |
 | B25 | Minimal GitHub Actions CI: Python 3.12, locked uv install, Ruff, unit tests, PostgreSQL 17 health check and migrations, integration tests, Docker build; verify configuration and local commands, then observe an actual GitHub run | Done | B03; first push or pull request for hosted evidence | [Workflow](../.github/workflows/ci.yml), [commands](../README.md#continuous-integration); local checks and [hosted run](https://github.com/befikadusata/cache-service/actions/runs/37461411063) passed; personal notes updated; development commit titled `Add minimal GitHub Actions CI` |
@@ -121,10 +121,33 @@ The sandbox-only health test stalled and was interrupted; the approved rerun pas
 B03–B14 are complete, including partial-success preservation, atomic publication, safe retries,
 controlled PostgreSQL failure recovery and separate-process coordination. B01 CLI output
 policy, B15 CLI parsing, B16 CLI execution and B17 live-service verification are complete.
-B18 deployment verification and B19 documentation reconciliation are complete.
-Next is B20 final code review, requirement audit, and full required-suite verification.
+B18 deployment verification, B19 documentation reconciliation and B20 final implementation
+review are complete. Next is B21 repository history and public-artifact audit. B22 video
+preparation is ready; B23 actual-hours reconciliation and B24 delivery remain.
 
 Submission is ready only when mandatory behavior, documented reliability guarantees, reproducible setup, and final checks pass; repository history is retained; private material is excluded; video meets the brief; and actual hours are reconciled. B24 remains separate from implementation completion because publishing and sending are delivery actions.
+
+## B20 acceptance evidence
+
+Final review on 2026-10-07 is recorded in [the requirement and code audit](final-review.md).
+Reviewed all service/CLI modules, migration, setup/deployment artifacts, CI and associated
+tests against R01–R13 and documented transaction/resource guarantees. No production code
+change or complexity removal was justified. Closed one verification gap with a real
+PostgreSQL blocked-GET test that checks 504, connection return and successful retry.
+
+- Baseline suite: 201 passed. New GET test alone: 1 passed. Final suite with securely supplied
+  `TEST_DATABASE_URL`: 202 passed (150 unit, 52 integration), no skips, in 22.67 seconds.
+  One upstream Starlette TestClient/httpx deprecation warning remains.
+- `uv sync --locked --offline`, `.venv/bin/ruff check .`, `git diff --check`,
+  `docker compose config --quiet`, and `docker build --tag cache-service:b20-review .` passed.
+  PostgreSQL schema revision is `0001`, matching head.
+- Inspected all 46 tracked files for current local credentials, common private-key/token
+  patterns and tracked local/private artifacts; no matches. This scoped check does not replace
+  B21's history/public-artifact audit. Existing database volumes were preserved.
+- Local suite used Python 3.14.6 and PostgreSQL 17; the built image uses Python 3.12.
+  No new hosted CI, Python 3.12 full suite or B18 deployment recreation run is claimed.
+- Personal final-review walkthrough notes updated outside Git. Implementation review is
+  complete; video, actual hours and delivery remain separate acceptance gates.
 
 ## B18 acceptance evidence
 

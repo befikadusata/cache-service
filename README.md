@@ -6,8 +6,9 @@ A FastAPI service that transforms two lists of strings, interleaves their result
 
 Payload endpoints, persistent transformation caching, bounded PostgreSQL coordination, and
 the CLI are implemented. Failure recovery, separate-process contention, live CLI requests,
-and Docker restart persistence have recorded verification evidence. Final review and delivery
-remain tracked in the [backlog](docs/backlog.md).
+and Docker restart persistence have recorded verification evidence. The
+[final implementation review](docs/final-review.md) and full required suite pass; delivery
+remains tracked in the [backlog](docs/backlog.md).
 
 ## Payload API
 

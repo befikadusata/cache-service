@@ -469,6 +469,35 @@ async def test_generation_deadline_does_not_publish_and_retry_succeeds(payload_a
 
 
 @pytest.mark.integration
+async def test_read_deadline_releases_connection_and_retry_succeeds(payload_app):
+    app, marker = payload_app
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        created = await client.post("/payloads", json={"list1": [marker], "list2": [marker]})
+        assert created.status_code == 200
+        identifier = created.json()["id"]
+
+    settings = Settings(database_url=os.environ["TEST_DATABASE_URL"], read_timeout_seconds=0.2)
+    application = create_app(settings)
+    async with application.router.lifespan_context(application):
+        async with AsyncClient(
+            transport=ASGITransport(app=application), base_url="http://test"
+        ) as client:
+            # PostgreSQL holds this lock until the transaction ends, blocking SELECT
+            # for longer than the GET budget without changing any stored payload.
+            async with app.state.engine.begin() as blocker:
+                await blocker.execute(text("LOCK TABLE payloads IN ACCESS EXCLUSIVE MODE"))
+                response = await asyncio.wait_for(client.get(f"/payloads/{identifier}"), 5)
+                assert response.status_code == 504
+                assert response.json() == {"detail": "Request timed out"}
+                assert application.state.engine.pool.checkedout() == 0
+
+            response = await client.get(f"/payloads/{identifier}")
+            assert response.status_code == 200
+            assert response.json() == {"output": f"{marker.upper()}, {marker.upper()}"}
+            assert application.state.engine.pool.checkedout() == 0
+
+
+@pytest.mark.integration
 async def test_collision_on_publication_readback_is_rejected(payload_app):
     app, marker = payload_app
     data = {"list1": [marker], "list2": ["publication"]}
