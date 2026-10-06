@@ -9,7 +9,7 @@ Planning stage. The service is not implemented yet. Payload identity and payload
 ## Engineering documentation
 
 - [Requirements and acceptance criteria](docs/requirements.md)
-- [Architecture options and decisions](docs/architecture.md)
+- [Architecture decisions](docs/architecture.md)
 - [Implementation plan](docs/implementation-plan.md)
 - [Verification strategy](docs/verification.md)
 

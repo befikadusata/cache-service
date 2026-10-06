@@ -36,7 +36,7 @@ These interpretations are not confirmed requirements. Record the task author's r
 - Require exactly one input source: inline JSON or file input, with stdin represented by a dash.
 - Require a positive repeat count. Each iteration creates or reuses a payload and reads its output.
 - Default output to stdout and send diagnostics to stderr. Decide the repeated-output format before CLI implementation.
-- Select and document input size limits and transformer timeouts during design; they are not specified in the brief.
+- Select and document numeric input limits, deadlines, and pool capacity during the foundation stage; they are not specified in the brief. The timeout and failure policy is defined in the architecture document.
 
 ## Additional reliability goals
 

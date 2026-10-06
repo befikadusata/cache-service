@@ -1,16 +1,16 @@
 # Implementation plan
 
-Build in reviewable stages, with working behavior and verification developed together. The sequence below is a planning baseline; select the database and concurrency design before database-specific implementation.
+Build in reviewable stages, with working behavior and verification developed together. The selected design is PostgreSQL, SQLAlchemy 2.x async access, per-string session advisory locks, and independent persistence of successful transformations. Follow the contracts in the architecture document during implementation.
 
 ## Stage 1 Requirements and design
 
-Reconcile task-author responses with the acceptance criteria. Decide payload identity, storage, database, supported worker model, coordination, timeout behavior, partial-success policy, and CLI output format. Compare alternatives before recording the choices. Establish the intended data model and failure behavior.
+Reconcile any task-author responses with the acceptance criteria. Database, coordination, transaction, versioning, and partial-success decisions are recorded. Finalize the provisional identity and storage interpretation if clarification arrives. Specify API response schemas, canonical encoding, input limits, CLI output format, and initial configurable timeout and capacity values before their implementation.
 
 Exit evidence: each mandatory requirement has an acceptance check; consequential architecture decisions have clear rationale and limits.
 
 ## Stage 2 Runnable foundation
 
-Create the minimal application, database configuration and lifecycle, dependency setup, and test harness. Keep configuration explicit and local secrets out of version control. Establish schema creation or migration appropriate to the chosen database.
+Create the minimal application, database configuration and lifecycle, dependency setup, and test harness. Keep configuration explicit and local secrets out of version control. Establish an initial schema migration and an explicit migration command. Add PostgreSQL Compose support at this stage so real database tests are available throughout development; complete deployment documentation in Stage 6.
 
 Exit evidence: application starts against a clean database and a real database integration test passes.
 
@@ -22,9 +22,9 @@ Exit evidence: valid creation and read work end to end; invalid input and unknow
 
 ## Stage 4 Transformation caching and concurrency
 
-Deduplicate strings within a request, load cached values in batches, and implement the selected missing-work coordination. Keep lock acquisition ordering and cleanup explicit where applicable. Handle uniqueness races and failures deliberately. Implement partial-success and retry policy.
+Deduplicate strings within a request, load cached values in batches, and implement the selected missing-work coordination. Acquire only one advisory lock at a time. Use the same physical connection for persistence, short READ COMMITTED transactions, bounded admission and lock waiting, and cancellation-protected cleanup. Invalidate connections when ownership or cleanup is uncertain. Handle uniqueness races and failures deliberately. Implement partial-success and retry policy.
 
-Exit evidence: sequential and concurrent call-count tests prove the chosen guarantees, including overlapping payloads; failed work does not become a complete payload; cancellation and exceptions release coordination resources.
+Exit evidence: sequential and multi-process call-count tests prove coordination for identical and overlapping payloads. Saturated waiters do not prevent the holder from committing. Failed work never becomes a complete payload. Cancellation and exceptions release or invalidate ownership. Forced lock-key collisions preserve correct results. Inspect PostgreSQL transaction state to prove no transaction spans external work.
 
 ## Stage 5 CLI
 

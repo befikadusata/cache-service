@@ -19,14 +19,20 @@ Verify externally observable behavior and cache guarantees. Unit tests isolate t
 | Simultaneous different payloads sharing strings | Shared missing strings are coordinated |
 | Transformer fails after some strings succeed | No complete payload; partial-success and retry policy respected |
 | Database conflicts or failure | No misleading success response or corrupt state |
-| Cancellation or abandoned ownership | Coordination is cleaned up or recoverable |
+| Cancellation during acquisition or transformation | Lock released or physical connection invalidated; next request can proceed |
+| Many waiters exceeding pool capacity | Bounded waiting and retryable errors; holder completes without another connection |
+| Forced advisory-key collision | Unrelated strings serialize but retain their correct values |
+| Forced cache or payload digest collision | Mismatched original identity is rejected; incorrect result is never returned |
+| Transformer version change | New work uses the new version; old payload remains readable |
+| Connection loss during transformation | No assumption of retained lock; outcome follows documented repeat-work limitation |
+| Slow transformation | Configured deadline applies; no transaction remains open during the call |
 | CLI parsing and I/O | All declared modes work; invalid inputs and server failures produce useful errors |
 
 ## Concurrency evidence
 
 Use controlled synchronization so requests actually overlap before a result is cached. Arbitrary sleeps alone can conceal races. Count transformer invocations by input value: one payload containing several distinct strings requires several transformations.
 
-If the supported deployment uses multiple workers, include a test across separate processes sharing the database. A single-process test cannot establish that guarantee. Test restart separately from concurrent execution and state the remaining crash window.
+The selected deployment supports multiple workers: include a test across separate processes sharing PostgreSQL. A single-process test cannot establish that guarantee. Test restart separately from concurrent execution and state the remaining crash window.
 
 ## Demonstration
 
