@@ -48,10 +48,10 @@ The task author delegated the payload identity and storage choices to us and ask
 - **Payload storage:** complete generated payloads are stored in PostgreSQL and retrieved by identifier. No filesystem payload files are created. Keeping payloads and reusable transformations in one durable database simplifies atomic publication and multi-worker access.
 - **Transformer:** deterministic uppercase conversion follows the sample. This remains our implementation assumption rather than an explicitly confirmed transformation contract.
 
-## Planned CLI policy
+## CLI usage
 
-Argument parsing is implemented in `src/cache_service/cli.py` (B15); the executable,
-HTTP requests and file I/O remain B16–B17. The parser uses Pydantic Settings, independently
+The `cache-service` executable implements argument parsing, HTTP requests and file I/O
+(B15–B16). The parser uses Pydantic Settings, independently
 of API/database settings. Environment variables and `.env` do not supply CLI options.
 
 | Option | Policy |
@@ -64,10 +64,26 @@ of API/database settings. Environment variables and `.env` do not supply CLI opt
 | `-h`, `--help` | Show help and exit successfully without requiring input |
 
 Empty source/destination strings, invalid URLs, nonpositive repeat counts, unknown flags
-and missing flag values are rejected. Parsing retains input text and file paths; payload
-validation, file access and user-facing failure diagnostics follow in B16.
+and missing flag values are rejected. Input is read once as UTF-8 JSON and validated before
+opening output or making requests. Local validation uses the default API input limits;
+the server additionally enforces its configured limits.
 
-Each successful repeat will create or reuse a payload, read it, and write one compact JSON
+```sh
+uv run cache-service --json '{"list1":["hello"],"list2":["world"]}' --repeat 2
+uv run cache-service --input payload.json --output results.jsonl
+cat payload.json | uv run cache-service --input - --host http://127.0.0.1:8000
+uv run cache-service --help
+```
+
+An output file is opened in overwrite mode after input validation. Read input into memory
+first, so using the same input and output path is supported, but replaces the input file.
+The CLI preserves a path prefix in the service base URL. Each repeat makes one POST followed
+by one GET, using one HTTP client. HTTP timeouts are 5 seconds for connection and pool waits,
+10 seconds for writes, and 75 seconds for reads, accommodating the server's default generation
+and cleanup budgets. Read timeouts bound inactivity, not total request duration. Servers with
+larger deadlines may outlast the CLI's read timeout. There are no automatic retries.
+
+Each successful repeat creates or reuses a payload, reads it, and writes one compact JSON
 object containing `id` and `output`, followed by a newline. This JSON Lines format applies
 to both stdout (the default) and output files, including a single repeat:
 
@@ -77,10 +93,15 @@ to both stdout (the default) and output files, including a single repeat:
 
 JSON encoding escapes embedded newlines in strings, so each result occupies one physical
 line. Repeated requests emit one record per successful iteration, even when the ID is reused.
-The CLI will write each record as the iteration finishes. Diagnostics go to stderr; a failed
+The CLI writes and flushes each record as the iteration finishes. Diagnostics go to stderr; a failed
 iteration stops the loop with a nonzero exit status and emits no result record for that
 iteration. Earlier complete records remain available. JSON Lines preserves the ID and exact
 output while allowing incremental consumption without buffering a single JSON array.
+Argument, input, file, network, HTTP-status and malformed-response errors exit with status 1;
+an interrupt exits with status 130. Diagnostics omit raw input, response bodies and credentials.
+If an output write fails, the final record may be incomplete; a server-side creation may already
+have committed even when the CLI reports failure. B17 verifies the installed executable
+against a live Uvicorn API and PostgreSQL; see [CLI evidence](docs/verification.md#cli-evidence).
 
 ## Engineering documentation
 

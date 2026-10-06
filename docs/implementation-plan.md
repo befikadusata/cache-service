@@ -37,7 +37,7 @@ Use Pydantic Settings for argument parsing and validation. Implement input sourc
 The B01 output policy is JSON Lines: emit a compact `id`/`output` object and newline after
 each successful create/read iteration to stdout or a file. Stop on failure with a nonzero exit
 status, preserving earlier complete records. Verify repeated IDs, embedded newline escaping,
-and failure after a successful iteration. See the [planned CLI policy](../README.md#planned-cli-policy).
+and failure after a successful iteration. See the [CLI policy](../README.md#cli-usage).
 
 Exit evidence: automated tests exercise parsing and malformed input; an integration scenario creates and reads a payload through the real service.
 
