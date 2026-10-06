@@ -62,8 +62,8 @@ Dependencies identify the required predecessor, rather than requiring every earl
 | B06 | Replaceable uppercase transformer and alternating composition; meaningful isolated tests | Done | B04 | [Transformer and composition](../src/cache_service/transformation.py), [tests](../tests/test_transformation.py); 21 focused tests, 65 unit tests and Ruff passed; personal notes updated; commit titled `feat: add replaceable transformer and payload composition` on `feat/b06-transformer-composition` |
 | B07 | Create and read complete payloads; generated UUID plus unique input digest; duplicate creation returns stored ID | Done | B03–B06 | [Payload flow](../src/cache_service/payloads.py), [routes](../src/cache_service/main.py), [tests](../tests/test_payloads.py); 80 tests and Ruff passed, including real PostgreSQL publication races and restart reuse; personal notes updated; commit titled `feat: add payload creation and retrieval` on `feat/b07-payload-endpoints` |
 | B08 | API tests for sample output, invalid types/lengths, empty input, unknown ID, retry and identity policy | Done | B07 | [Payload tests](../tests/test_payloads.py); API coverage reviewed against the contract; 103 tests and Ruff passed, including real PostgreSQL identity/version and retry checks; see B08 acceptance evidence; commit titled `test: complete B08 payload API coverage` on `feat/b08-api-coverage` |
-| B09 | Batch cache reads and request deduplication; persist successful results with versioned keys and authoritative readback | Ready | B03, B05, B06 | Predecessors complete; implementation pending |
-| B10 | One advisory lock at a time, recheck after acquire, same connection for writes; no transaction over external call | Waiting | B09 | Coordination design recorded; implementation pending |
+| B09 | Batch cache reads and request deduplication; persist successful results with versioned keys and authoritative readback | Done | B03, B05, B06 | [Cache flow](../src/cache_service/cache.py), [payload integration](../src/cache_service/payloads.py), [cache tests](../tests/test_cache.py); 116 full-suite tests and Ruff passed against PostgreSQL; personal notes updated; commit titled `feat: add persistent transformation caching` on `feat/b09-transformation-cache` |
+| B10 | One advisory lock at a time, recheck after acquire, same connection for writes; no transaction over external call | Ready | B09 | B09 complete; coordination design recorded; implementation pending |
 | B11 | Bounded admission and waits, cancellation-safe cleanup, invalidate uncertain ownership; map operational failures to documented HTTP responses | Waiting | B10, B04 | Numeric budgets and cleanup code pending |
 | B12 | Preserve successful transformations on later failure; publish complete payload atomically; verify safe retries | Waiting | B07, B09–B11 | Policy recorded; implementation pending |
 | B13 | Real PostgreSQL tests for timeout, cancellation, saturation, lock loss, collisions, version changes and no open transaction during transform | Waiting | B11, B12 | Controlled synchronization and exact assertions pending |
@@ -118,7 +118,7 @@ The sandbox-only health test stalled and was interrupted; the approved rerun pas
 
 ## Next work and completion gate
 
-B03 runtime verification, B04 contract and model checks, B05 identity helpers, and B06 transformation and composition are complete. B07 payload creation and retrieval and B08 API coverage review are also complete. Next implement B09 transformation caching, then proceed through cache coordination, CLI and deployment evidence. B09 prerequisites are complete.
+B03 runtime verification, B04 contract and model checks, B05 identity helpers, and B06 transformation and composition are complete. B07 payload creation and retrieval and B08 API coverage review are also complete. B09 persistent transformation caching is complete. Next implement B10 advisory coordination, then proceed through bounded cleanup, CLI and deployment evidence. B10 prerequisites are complete.
 
 Submission is ready only when mandatory behavior, documented reliability guarantees, reproducible setup, and final checks pass; repository history is retained; private material is excluded; video meets the brief; and actual hours are reconciled. B24 remains separate from implementation completion because publishing and sending are delivery actions.
 
@@ -233,3 +233,33 @@ and supplies `TEST_DATABASE_URL` to pytest without printing credentials. No new 
 request flow or operational policy was introduced, so existing personal B07 notes remain
 applicable. Per-string caching and concurrent transformer call-count guarantees remain
 B09–B14. Recorded in commit titled `test: complete B08 payload API coverage`.
+
+
+## B09 acceptance evidence
+
+Verification on 2026-10-06, branch `feat/b09-transformation-cache`, commit titled
+`feat: add persistent transformation caching`:
+
+| Check | Result and scope |
+| --- | --- |
+| Focused cache and payload tests with local `TEST_DATABASE_URL` | Initial sandbox database run failed and was interrupted; approved rerun passed 48 tests before the final two unit checks were added |
+| Full `.venv/bin/python` runner loading ignored local settings and invoking `pytest -q` with `TEST_DATABASE_URL` | 116 passed, including all PostgreSQL tests; one existing Starlette TestClient deprecation warning |
+| `.venv/bin/ruff check .` | Passed |
+| `git diff --check` | Passed |
+
+B09 adds 13 cache tests: three isolated checks and ten PostgreSQL cases. Evidence covers exact
+source deduplication, one batched read for normal input, two bounded batches for 501 cached
+sources, empty input/results, reuse by distinct payloads and by a fresh application generating
+a new payload, version separation, successful-result retention on later failure, retry of only
+remaining misses, timeout/cancellation without caching failed work, collisions within a request
+and at lookup/conflict readback, and authoritative stored results after insert conflict. A
+transformer assertion verifies that no connection is checked out during the external operation.
+Existing payload tests now use unique sources where call counts or forced failures require misses
+and remove marked transformation rows alongside payloads.
+
+The existing migration already provides the transformation primary key and retained identity;
+no schema change is required. README, API contract and architecture reflect the implemented
+scope. Personal cache walkthrough, design alternatives, payload trace and conventional-commit
+preference were updated outside Git. Concurrent misses can still repeat transformer calls;
+advisory ownership and multi-process minimized-call guarantees remain B10–B14. B12 retains
+coordinated retry and atomic-publication evidence as its completion gate.

@@ -28,9 +28,20 @@ row in a separate READ COMMITTED statement before returning its UUID after commi
 lookup and conflict readback reject mismatched canonical identities. GET reads by UUID, independent
 of the current transformer version. The app factory accepts a replacement transformer and version.
 
-This stage implements steps 1–2 and 10 below, with direct transformation in between. Per-string
-deduplication, caching, advisory coordination, and partial-success retention follow in B09–B12.
-Concurrent misses can repeat external work, while payload uniqueness still produces one stored ID.
+B09 adds `cache.py`: deduplicate exact strings in first-occurrence order, compute versioned
+identities and load cache rows in batches of at most 500 digests. Each row's source and version
+must match before reuse. The read connection closes before transformation. For each miss,
+transform once within the request, insert the successful result in its own short transaction
+with `ON CONFLICT (version, source_digest) DO NOTHING`, then read and verify the authoritative
+row in a separate statement. Use its result only after commit. Reconstruct original list order
+and duplicates from the result mapping before composing and publishing the payload.
+
+Successful transformations survive a later failure, timeout or cancellation. Failed operations
+are not inserted as results. Empty input avoids cache access. Request-local digest collisions
+are rejected before database lookup. The existing `0001` schema supports this flow unchanged.
+This implements steps 1–3, uncoordinated 7–8, and 10 below. Advisory coordination and bounded
+cleanup remain B10–B14; concurrent misses can repeat external work while conflict readback
+keeps stored results authoritative and payload uniqueness produces one stored ID.
 Configured overall deadlines and generic error responses are wired; coordinated cleanup and
 capacity guarantees remain future work. PostgreSQL text storage does not support every possible
 Python string, including NUL and lone surrogate values; such storage failures return a generic
@@ -59,7 +70,7 @@ A payload record stores a generated UUID, input digest, canonical input includin
 
 Identity helpers are implemented in `src/cache_service/identity.py` and accept already validated inputs. Canonical JSON uses lexicographically sorted keys, separators `,` and `:`, no formatting whitespace, and ASCII Unicode escapes (`ensure_ascii=True`). Hash the resulting text encoded as UTF-8 with SHA-256, retaining the full 32-byte digest. Payload objects contain exactly `list1`, `list2`, and `version`; transformation objects contain exactly `source` and `version`. For example, empty payload input is `{"list1":[],"list2":[],"version":"uppercase-v1"}`. Preserve list boundaries, element order, duplicate multiplicity, case, whitespace, and exact Unicode code points without normalization. ASCII escaping is a representation choice and does not expand the database's supported text values.
 
-Use SHA-256 for database lookup keys rather than indexing unbounded source text. Despite its column name, `source_digest` hashes the canonical transformation object including version; the database primary key retains its separate version column. After every lookup or conflict readback, compare retained canonical input for payloads, or both version and exact source for transformations. The identity helpers raise `IdentityCollisionError` on mismatch with a fixed message containing no raw input. Supporting both colliding values is outside scope. Payload persistence and HTTP collision mapping are implemented in B07; transformation-cache persistence and coordination error mapping remain B09/B11 work.
+Use SHA-256 for database lookup keys rather than indexing unbounded source text. Despite its column name, `source_digest` hashes the canonical transformation object including version; the database primary key retains its separate version column. After every lookup or conflict readback, compare retained canonical input for payloads, or both version and exact source for transformations. The identity helpers raise `IdentityCollisionError` on mismatch with a fixed message containing no raw input. Supporting both colliding values is outside scope. Payload persistence and HTTP collision mapping are implemented in B07; transformation-cache persistence is implemented in B09, and coordination error mapping remains B11 work.
 
 Transformer version is an explicit implementation constant identifying behavior. Change it when transformation semantics change. Include it in both identity types and advisory-lock derivation. Existing payloads remain readable by identifier after a version change; the service does not automatically migrate or delete old cache entries.
 

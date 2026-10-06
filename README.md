@@ -6,7 +6,8 @@ A FastAPI service that transforms two lists of strings, interleaves their result
 
 The foundation and payload endpoints are implemented: strict validation, uppercase transformation,
 alternating composition, PostgreSQL storage, and reuse of identifiers for identical inputs.
-Per-string transformation caching, worker coordination, and the CLI remain planned work.
+Per-string transformation caching is implemented. Worker coordination and the CLI remain
+planned work.
 
 ## Payload API
 
@@ -28,7 +29,12 @@ still repeat transformation until coordination is implemented.
 Both lists must contain strings and have equal lengths. Two empty lists produce an empty
 output. Unknown UUIDs return 404, and invalid input returns 422. Configurable input limits,
 deadlines, and error responses are described in the [API contract](docs/api-contract.md).
-Only complete outputs are published; successful individual transformations are not yet cached.
+Only complete outputs are published. Successful individual transformations are cached under
+their exact source and transformer version, including after restart. Strings shared by different
+payloads reuse those results, and duplicates within a request are transformed once. Successful
+results survive a later transformer failure so retries only transform remaining misses. Cache
+reads are batched; conflicting inserts use verified authoritative readback. Concurrent misses
+can still repeat calls until advisory coordination is implemented in B10.
 
 ## Assessment assumptions
 
