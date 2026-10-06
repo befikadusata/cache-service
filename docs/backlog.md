@@ -61,7 +61,7 @@ Dependencies identify the required predecessor, rather than requiring every earl
 | B05 | Define canonical encoding, version and digest identities; verify list boundaries, order, whitespace and collision handling | Done | B04 | [Identity helpers](../src/cache_service/identity.py), [tests](../tests/test_identity.py), exact format in [architecture](architecture.md); 18 focused tests and 44 unit tests passed; personal notes updated; commit titled `Add versioned input identities` on `feat/versioned-identities` |
 | B06 | Replaceable uppercase transformer and alternating composition; meaningful isolated tests | Done | B04 | [Transformer and composition](../src/cache_service/transformation.py), [tests](../tests/test_transformation.py); 21 focused tests, 65 unit tests and Ruff passed; personal notes updated; commit titled `feat: add replaceable transformer and payload composition` on `feat/b06-transformer-composition` |
 | B07 | Create and read complete payloads; generated UUID plus unique input digest; duplicate creation returns stored ID | Done | B03–B06 | [Payload flow](../src/cache_service/payloads.py), [routes](../src/cache_service/main.py), [tests](../tests/test_payloads.py); 80 tests and Ruff passed, including real PostgreSQL publication races and restart reuse; personal notes updated; commit titled `feat: add payload creation and retrieval` on `feat/b07-payload-endpoints` |
-| B08 | API tests for sample output, invalid types/lengths, empty input, unknown ID, retry and identity policy | Ready | B07 | Basic scenarios implemented alongside B07 in [payload tests](../tests/test_payloads.py); broader API coverage review remains |
+| B08 | API tests for sample output, invalid types/lengths, empty input, unknown ID, retry and identity policy | Done | B07 | [Payload tests](../tests/test_payloads.py); API coverage reviewed against the contract; 103 tests and Ruff passed, including real PostgreSQL identity/version and retry checks; see B08 acceptance evidence; commit titled `test: complete B08 payload API coverage` on `feat/b08-api-coverage` |
 | B09 | Batch cache reads and request deduplication; persist successful results with versioned keys and authoritative readback | Ready | B03, B05, B06 | Predecessors complete; implementation pending |
 | B10 | One advisory lock at a time, recheck after acquire, same connection for writes; no transaction over external call | Waiting | B09 | Coordination design recorded; implementation pending |
 | B11 | Bounded admission and waits, cancellation-safe cleanup, invalidate uncertain ownership; map operational failures to documented HTTP responses | Waiting | B10, B04 | Numeric budgets and cleanup code pending |
@@ -118,7 +118,7 @@ The sandbox-only health test stalled and was interrupted; the approved rerun pas
 
 ## Next work and completion gate
 
-B03 runtime verification, B04 contract and model checks, B05 identity helpers, and B06 transformation and composition are complete. B07 payload creation and retrieval are also complete. Next review B08 API coverage and implement B09 transformation caching, then proceed through cache coordination, CLI and deployment evidence. B09 prerequisites are complete.
+B03 runtime verification, B04 contract and model checks, B05 identity helpers, and B06 transformation and composition are complete. B07 payload creation and retrieval and B08 API coverage review are also complete. Next implement B09 transformation caching, then proceed through cache coordination, CLI and deployment evidence. B09 prerequisites are complete.
 
 Submission is ready only when mandatory behavior, documented reliability guarantees, reproducible setup, and final checks pass; repository history is retained; private material is excluded; video meets the brief; and actual hours are reconciled. B24 remains separate from implementation completion because publishing and sending are delivery actions.
 
@@ -206,3 +206,30 @@ deadline, successful retry, and configured limits above defaults. Concurrent mis
 transformation: no per-string cache or advisory-lock guarantee is claimed in B07. B08 retains
 its separate API coverage review; B09–B14 retain caching and coordination work. Personal request
 flow notes updated outside Git. Recorded in commit titled `feat: add payload creation and retrieval`.
+
+## B08 acceptance evidence
+
+On 2026-10-06, branch `feat/b08-api-coverage` completes the API coverage review against
+[the contract](api-contract.md). It extends tests without changing service behavior.
+
+| Acceptance scenario | HTTP evidence in `tests/test_payloads.py` |
+| --- | --- |
+| Alternating uppercase output and UUID response | Existing create/read test; new identity cases assert exact response objects, Unicode expansion and preserved whitespace |
+| Strict input and configured limits | Missing fields, invalid arrays/items in both lists, unequal lengths, extra fields and malformed JSON return 422 before database access; all three configurable limit types are exercised |
+| Empty lists/elements and unknown IDs | Existing PostgreSQL checks verify empty output, retained empty elements and 404; malformed UUID validation also runs without PostgreSQL |
+| Repeated input and safe retry | Identical input returns its stored ID; failed transformation publishes nothing, then a healthy retry creates readable output and subsequent reuse returns the same ID; deadline retry remains covered |
+| Exact ordered input identity | Case, whitespace, order, list boundaries, duplicate multiplicity and Unicode normalization differences produce distinct IDs, including equal-output inputs |
+| Transformer version and persistence | A replacement version creates a new ID/output while the old payload stays readable; existing fresh-application test verifies persisted ID reuse |
+
+| Executed check | Result |
+| --- | --- |
+| `.venv/bin/pytest tests/test_payloads.py -m 'not integration' -q` | 22 passed, 15 deselected |
+| Focused PostgreSQL tests inside the sandbox | Failed because database socket creation was denied; resolved by approved execution outside the sandbox |
+| Full `.venv/bin/pytest -q --tb=short` with local `TEST_DATABASE_URL` | 103 passed, including all 15 payload integration cases and foundation readiness; one existing upstream TestClient deprecation warning |
+| `.venv/bin/ruff check .`, `.venv/bin/ruff format --check tests/test_payloads.py` and `git diff --check` | Passed |
+
+The full suite was invoked through a temporary runner that loads the ignored local settings
+and supplies `TEST_DATABASE_URL` to pytest without printing credentials. No new architecture,
+request flow or operational policy was introduced, so existing personal B07 notes remain
+applicable. Per-string caching and concurrent transformer call-count guarantees remain
+B09–B14. Recorded in commit titled `test: complete B08 payload API coverage`.
