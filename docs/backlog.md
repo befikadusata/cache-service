@@ -99,7 +99,7 @@ The blocked results above are historical sandbox attempts. On 2026-10-06, approv
 | `.venv/bin/ruff check .` | Passed |
 | `.venv/bin/pytest -m 'not integration'` | 2 passed, 1 deselected |
 | `docker compose up --build -d` | Image build passed; startup failed because host port 5432 was occupied |
-| `CACHE_DATABASE_PORT=55432 docker compose up -d` | Passed against newly created PostgreSQL 17 volume; API started using Python 3.12 image |
+| `DB_PORT=55432 docker compose up -d` | Passed against newly created PostgreSQL 17 volume; API started using Python 3.12 image |
 | Full `.venv/bin/pytest` with `TEST_DATABASE_URL` on port 55432 | 3 passed, including real PostgreSQL readiness; one upstream TestClient deprecation warning |
 | `SELECT version_num FROM alembic_version` | Revision `0001` applied |
 | HTTP `/health/live` and `/health/ready` on port 8000 | Both returned HTTP 200 and `{"status":"ok"}` |
@@ -124,6 +124,10 @@ Submission is ready only when mandatory behavior, documented reliability guarant
 
 ## Secrets and configuration follow-up
 
-Removed the fixed development password from Compose, examples, and usage commands. Compose now requires CACHE_DATABASE_PASSWORD; scripts/configure_local.py generates ignored local configuration with mode 0600 and refuses overwrites. The validated database URL is stored as SecretStr and only unwrapped at database connection boundaries. A regression test checks representation, JSON serialization, and formatted validation errors. The previously public development password remains in Git history and must be considered compromised; the local database role was rotated without deleting its volume. Expanded Compose configuration must not be used as public evidence. Personal foundation notes and working agreement updated.
+Removed the fixed development password from Compose, examples, and usage commands. Compose now requires DB_PASS; scripts/configure_local.py generates ignored local configuration with mode 0600 and refuses overwrites. The validated database URL is stored as SecretStr and only unwrapped at database connection boundaries. A regression test checks representation, JSON serialization, and formatted validation errors. The previously public development password remains in Git history and must be considered compromised; the local database role was rotated without deleting its volume. Expanded Compose configuration must not be used as public evidence. Personal foundation notes and working agreement updated.
 
 Follow-up verification: Ruff passed; all four foundation tests passed against the rotated PostgreSQL role; Docker rebuild and migration/startup passed with the preserved volume; readiness returned HTTP 200. `docker compose --env-file /dev/null config --quiet` correctly rejected a missing password. `.env` is ignored by Git and has mode 0600.
+
+Configuration naming follow-up: removed the CACHE_ settings prefix and renamed variables to DATABASE_URL, DB_PASS, and DB_PORT throughout Compose, setup, examples, tests, and local configuration. Pool and timeout variables use their unprefixed setting names. Configuration guidance simplified; personal notes updated.
+
+Naming verification: Ruff and all four foundation tests passed; Compose configuration, image rebuild, migrations, and API startup passed. Rebuilt API readiness returned HTTP 200.

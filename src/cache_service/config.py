@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_prefix="CACHE_", env_file=".env", extra="ignore", hide_input_in_errors=True
+        env_file=".env", extra="ignore", hide_input_in_errors=True
     )
 
     database_url: SecretStr
@@ -19,6 +19,7 @@ class Settings(BaseSettings):
         except ValueError:
             raise ValueError("Database URL must use postgresql+asyncpg") from None
         return value
+
     pool_size: int = Field(default=10, ge=2, le=100)
     pool_timeout_seconds: float = Field(default=5, gt=0)
     database_connect_timeout_seconds: float = Field(default=5, gt=0)
