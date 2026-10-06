@@ -68,7 +68,7 @@ Use separate configurable budgets for admission, checkout, advisory waiting, tra
 
 Use a blocking advisory acquisition with a transaction-local lock timeout. The statement timeout for that acquisition must permit the intended wait. Scope settings to the transaction so pooled connections do not leak configuration. The wait budget should normally accommodate transformation and persistence plus margin; it is not a correctness dependency. Lock-wait timeout limits waiting, not ownership duration. See [PostgreSQL timeout settings](https://www.postgresql.org/docs/current/runtime-config-client.html).
 
-Never fall back to uncoordinated transformation after a lock timeout. Return 503 for admission, pool, lock-wait, or database unavailability; return 504 for transformer or overall-generation timeout; return 502 for an external transformation failure. Retry guidance should be explicit. Internal invariant or digest-collision failures return a generic server error and are logged without exposing raw input. Numeric defaults will be selected with the first integration measurements.
+Never fall back to uncoordinated transformation after a lock timeout. Return 503 for admission, pool, lock-wait, or database unavailability; return 504 for transformer or overall-generation timeout; return 502 for an external transformation failure. Retry guidance should be explicit. Internal invariant or digest-collision failures return a generic server error and are logged without exposing raw input. Initial input and overall deadline defaults are defined in the [API contract](api-contract.md). Coordination budgets will be selected with the first integration measurements.
 
 ## Deployment and guarantees
 

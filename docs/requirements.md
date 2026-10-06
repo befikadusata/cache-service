@@ -29,7 +29,7 @@ The task author responded that both payload identity and storage are our call an
 
 See the [README assumptions](../README.md#assessment-assumptions) for rationale. Revisit these choices if new instructions change the contract.
 
-## Proposed input and CLI policy
+## Input and CLI policy
 
 - Preserve string content, whitespace, case, duplicates, and ordering in input identity.
 - Reject unequal lengths and non-string items without coercing them silently.
@@ -38,7 +38,7 @@ See the [README assumptions](../README.md#assessment-assumptions) for rationale.
 - Require exactly one input source: inline JSON or file input, with stdin represented by a dash.
 - Require a positive repeat count. Each iteration creates or reuses a payload and reads its output.
 - Default output to stdout and send diagnostics to stderr. Decide the repeated-output format before CLI implementation.
-- Select and document numeric input limits, deadlines, and pool capacity during the foundation stage; they are not specified in the brief. The timeout and failure policy is defined in the architecture document.
+- The [payload API contract](api-contract.md) freezes schemas, HTTP statuses, configurable input limits and overall deadlines. Routes and runtime enforcement follow in B07/B11; coordination capacity remains B11 work.
 
 ## Additional reliability goals
 
