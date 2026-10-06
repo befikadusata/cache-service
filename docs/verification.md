@@ -18,6 +18,8 @@ Verify externally observable behavior and cache guarantees. Unit tests isolate t
 | Simultaneous identical requests | Same identifier; transformer call count matches the declared guarantee |
 | Simultaneous different payloads sharing strings | Shared missing strings are coordinated |
 | Transformer fails after some strings succeed | No complete payload; partial-success and retry policy respected |
+| Timeout or cancellation after an earlier success | Committed result survives; fresh-application retry transforms only misses |
+| Payload publication fails after INSERT or before commit | Payload rolls back; attempted UUID is unreadable; retry reuses all committed transformations |
 | Database conflicts or failure | No misleading success response or corrupt state |
 | Cancellation during acquisition or transformation | Lock released or physical connection invalidated; next request can proceed |
 | Many waiters exceeding pool capacity | Bounded waiting and retryable errors; holder completes without another connection |

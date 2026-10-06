@@ -65,9 +65,9 @@ Dependencies identify the required predecessor, rather than requiring every earl
 | B09 | Batch cache reads and request deduplication; persist successful results with versioned keys and authoritative readback | Done | B03, B05, B06 | [Cache flow](../src/cache_service/cache.py), [payload integration](../src/cache_service/payloads.py), [cache tests](../tests/test_cache.py); 116 full-suite tests and Ruff passed against PostgreSQL; personal notes updated; commit titled `feat: add persistent transformation caching` on `feat/b09-transformation-cache` |
 | B10 | One advisory lock at a time, recheck after acquire, same connection for writes; no transaction over external call | Done | B09 | [Cache coordination](../src/cache_service/cache.py), [tests](../tests/test_cache.py); 120 full-suite tests and Ruff passed against PostgreSQL; see B10 evidence below; personal notes updated; commit titled `feat: coordinate transformation misses with advisory locks` on `feat/b10-advisory-coordination` |
 | B11 | Bounded admission and waits, cancellation-safe cleanup, invalidate uncertain ownership; map operational failures to documented HTTP responses | Done | B10, B04 | [Coordination](../src/cache_service/coordination.py), [cache flow](../src/cache_service/cache.py), [tests](../tests/test_coordination.py); 137 full-suite tests and Ruff passed against PostgreSQL; see B11 evidence below; personal notes updated; commit titled `feat: bound cache coordination and protect cleanup` on `feat/b11-bounded-coordination` |
-| B12 | Preserve successful transformations on later failure; publish complete payload atomically; verify safe retries | Ready | B07, B09–B11 | Policy recorded; implementation pending |
-| B13 | Real PostgreSQL tests for timeout, cancellation, saturation, lock loss, collisions, version changes and no open transaction during transform | Waiting | B11, B12 | Controlled synchronization and exact assertions pending |
-| B14 | Multi-process identical and overlapping requests; call counts per distinct string, consistent IDs and restart reuse | Waiting | B12 | Test instrumentation pending; single-process evidence insufficient |
+| B12 | Preserve successful transformations on later failure; publish complete payload atomically; verify safe retries | Done | B07, B09–B11 | [Payload tests](../tests/test_payloads.py); five new PostgreSQL cases, 142 full-suite tests and Ruff passed; see B12 evidence below; personal notes updated; commit titled `Verify partial success and atomic payload retries` on `feat/b12-atomic-publication-retries` |
+| B13 | Real PostgreSQL tests for timeout, cancellation, saturation, lock loss, collisions, version changes and no open transaction during transform | Ready | B11, B12 | Broader controlled failure evidence pending; existing B10–B12 checks cover part of the scope |
+| B14 | Multi-process identical and overlapping requests; call counts per distinct string, consistent IDs and restart reuse | Ready | B12 | Test instrumentation pending; single-process evidence insufficient |
 | B15 | Pydantic Settings CLI parsing; host, repeat and mutually exclusive input source validation; resolve help alias | Waiting | B01 output policy; B04 | Parsing implementation pending |
 | B16 | CLI create/read loop, file/stdin/JSON input, file/stdout output, stderr diagnostics and nonzero failure exit | Waiting | B07, B15 | Implementation pending |
 | B17 | CLI parsing and I/O tests plus a real-service integration scenario | Waiting | B16 | Tests pending |
@@ -118,7 +118,9 @@ The sandbox-only health test stalled and was interrupted; the approved rerun pas
 
 ## Next work and completion gate
 
-B03 runtime verification, B04 contract and model checks, B05 identity helpers, and B06 transformation and composition are complete. B07 payload creation and retrieval and B08 API coverage review are also complete. B09 persistent transformation caching is complete. B10 advisory coordination is also complete. B11 bounded admission, waits and protected cleanup is complete. Next is B12 acceptance for partial-success preservation, atomic publication and safe retries, then broader failure/concurrency evidence, CLI and deployment.
+B03–B12 are complete, including partial-success preservation, atomic publication and safe retries.
+Next is B13 broader PostgreSQL failure evidence, followed by B14 multi-process concurrency,
+CLI and deployment.
 
 Submission is ready only when mandatory behavior, documented reliability guarantees, reproducible setup, and final checks pass; repository history is retained; private material is excluded; video meets the brief; and actual hours are reconciled. B24 remains separate from implementation completion because publishing and sending are delivery actions.
 
@@ -307,3 +309,32 @@ repeated cancellation protection, and force-close after stalled cleanup. Existin
 continue to prove no transaction during transformation and same-session persistence.
 Broader disconnect, crash and multi-process evidence remains B13/B14. Personal learning notes
 and a timeout/cancellation cookbook were updated outside Git.
+
+## B12 acceptance evidence
+
+Verification on 2026-10-06:
+
+- `.venv/bin/pytest tests/test_payloads.py -k 'partial_success or publication_rollback' -q`
+  with TEST_DATABASE_URL derived from masked local Settings: 5 passed, 37 deselected.
+- Full `.venv/bin/pytest -q` with the same database configuration: 142 passed,
+  including real PostgreSQL tests; one existing upstream TestClient deprecation warning.
+- `.venv/bin/ruff check .` and `git diff --check`: passed.
+- Sandbox database execution failed/stalled and was interrupted; approved focused and full
+  execution outside the sandbox passed. Database URLs and credentials were not printed.
+
+Controlled API tests pause the second transformation and use an independent connection to
+verify the first result is already committed while no payload exists. Transformer failure,
+timeout and cancellation preserve that result and publish no payload. A fresh application
+retries only the missing strings, reconstructs complete alternating output and reuses the ID
+on subsequent identical requests.
+
+Publication tests inject exceptions after the real payload INSERT and immediately before
+commit. Both roll back the payload, return generic retryable 503 responses, retain all
+successful transformations and leave the attempted UUID unreadable. Fresh-application retries
+perform no transformations and return a complete readable payload with a reusable identifier.
+Existing concurrent publication tests continue to verify one authoritative stored ID.
+
+The existing implementation satisfies these cases; no production change, schema revision or
+dependency change was needed. These faults precede commit and do not establish behavior for
+lost commit acknowledgments or all connection-loss windows. Broader failure and multi-process
+evidence remains B13/B14. Personal request-flow and design notes updated outside Git.
