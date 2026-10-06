@@ -58,7 +58,7 @@ Dependencies identify the required predecessor, rather than requiring every earl
 | B02 | Application lifecycle, PostgreSQL configuration, migration and Compose; inspect setup artifacts | Done | None | [Application](../src/cache_service/main.py), [migration](../migrations/versions/0001_initial.py), [Compose](../compose.yaml); commit `6a492e7` |
 | B03 | Install dependencies, generate lockfile, run lint and foundation tests, apply clean migration, check both health endpoints and image startup | Done | B02; execution/network access | Runtime checks passed on 2026-10-06; `uv.lock` generated; PostgreSQL host port 55432; see verification record below; personal notes updated |
 | B04 | Freeze POST and GET response schemas, strict input validation, empty behavior, configurable limits and request deadlines | Done | Selected B01 assumptions | [Contract](api-contract.md), [models](../src/cache_service/schemas.py), [settings](../src/cache_service/config.py), [tests](../tests/test_schemas.py); 18 focused tests and Ruff passed; personal notes updated; commit titled `Define payload API contract and validation`. Endpoint enforcement remains B07/B11 |
-| B05 | Define canonical encoding, version and digest identities; verify list boundaries, order, whitespace and collision handling | Ready | B04 | Design in [architecture](architecture.md); implementation pending |
+| B05 | Define canonical encoding, version and digest identities; verify list boundaries, order, whitespace and collision handling | Done | B04 | [Identity helpers](../src/cache_service/identity.py), [tests](../tests/test_identity.py), exact format in [architecture](architecture.md); 18 focused tests and 44 unit tests passed; personal notes updated; commit titled `Add versioned input identities` on `feat/versioned-identities` |
 | B06 | Replaceable uppercase transformer and alternating composition; meaningful isolated tests | Ready | B04 | Sample output and empty input policy in requirements |
 | B07 | Create and read complete payloads; generated UUID plus unique input digest; duplicate creation returns stored ID | Waiting | B03–B06 | Initial schema written; request flow pending |
 | B08 | API tests for sample output, invalid types/lengths, empty input, unknown ID, retry and identity policy | Waiting | B07 | [Verification scenarios](verification.md) |
@@ -118,7 +118,7 @@ The sandbox-only health test stalled and was interrupted; the approved rerun pas
 
 ## Next work and completion gate
 
-B03 runtime verification is complete. B04 contract and model checks are complete. Next implement B05–B06, then the payload flow and proceed through cache coordination, CLI and deployment evidence.
+B03 runtime verification is complete. B04 contract and model checks and B05 identity helpers are complete. Next implement B06, then the payload flow and proceed through cache coordination, CLI and deployment evidence.
 
 Submission is ready only when mandatory behavior, documented reliability guarantees, reproducible setup, and final checks pass; repository history is retained; private material is excluded; video meets the brief; and actual hours are reconciled. B24 remains separate from implementation completion because publishing and sending are delivery actions.
 
@@ -165,3 +165,9 @@ Project configuration now exposes DB_HOST, DB_PORT, DB_USER, DB_NAME and DB_PASS
 Verification: full `.venv/bin/pytest -q` passed all 27 tests with TEST_DATABASE_URL set from masked local settings, including real PostgreSQL readiness. Readiness also returned 200 using DB_* settings without a DATABASE_URL override. Ruff, actionlint v1.7.7, Compose configuration and git diff whitespace checks passed. One upstream Starlette TestClient deprecation warning remains.
 
 Hosted CI run `37461260126` failed during container creation: GitHub runner argument parsing rejected single-quoted health-command grouping (`unknown shorthand flag: U`). Follow-up uses double-quoted grouping for the Docker option; Resolved in commit `2af2e17`: [hosted rerun 37461411063](https://github.com/befikadusata/cache-service/actions/runs/37461411063) passed every step. Database naming implementation is commit `c1b59e4`. Personal notes updated.
+
+## B05 acceptance evidence
+
+On 2026-10-06, `.venv/bin/pytest tests/test_identity.py -q` passed 18 tests. Fixed vectors verify canonical JSON, SHA-256 digests and stable signed advisory keys. Additional checks cover exact input distinctions, empty inputs, Unicode without normalization, version changes, and simulated digest and advisory-key collisions. Retained identity comparisons reject mismatches with fixed messages containing no input. The existing migration already matches these 32-byte keys; no schema change was needed.
+
+The full `.venv/bin/pytest -m 'not integration' -q` suite initially stalled in the sandbox health test and was interrupted. The approved rerun passed 44 tests with one integration test deselected and the existing upstream Starlette TestClient deprecation warning. `.venv/bin/ruff check .` and `git diff --check` passed. Personal design notes updated. Recorded in the commit titled `Add versioned input identities` on `feat/versioned-identities`. These checks establish pure identity behavior; persistence readback, HTTP error mapping and real advisory coordination remain later work.
