@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: cache
+          POSTGRES_DB: cache
+          # Disposable CI credentials; never use these outside this service.
+          POSTGRES_PASSWORD: ci-only-not-a-secret
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cache -d cache"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      UV_PYTHON: "3.12"
+      UV_LOCKED: "true"
+      DATABASE_URL: postgresql+asyncpg://cache:ci-only-not-a-secret@localhost:5432/cache
+      TEST_DATABASE_URL: postgresql+asyncpg://cache:ci-only-not-a-secret@localhost:5432/cache
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@6b9c6063abd6010835644d4c2e1bef4cf5cd0fca # v6.0.1
+        with:
+          version: "0.9.5"
+          python-version: "3.12"
+          enable-cache: false
+      - name: Install dependencies from lockfile
+        run: uv sync --locked
+      - name: Ruff
+        run: make lint
+      - name: Unit tests
+        run: make test
+      - name: Apply migrations
+        run: uv run alembic upgrade head
+      - name: Integration tests
+        run: make test-integration
+      - name: Build Docker image
+        run: docker build --tag cache-service:ci .

@@ -78,6 +78,7 @@ Dependencies identify the required predecessor, rather than requiring every earl
 | B22 | Prepare and record English walkthrough with camera and screen, code trace, CLI and tests; verify duration at most 15 minutes | Waiting | B20 | Personal rehearsal remains in sibling private workspace; candidate records video |
 | B23 | Track actual time from available records; candidate reconciles previous work; report honest total without estimating missing history as fact | Ready | Ongoing | No authoritative total yet; candidate confirmation required |
 | B24 | Create/publish neutral public repository and video, verify both links, draft reply with actual hours, submit when explicitly authorized | Waiting | B20–B23 | No public repository, video or submission yet |
+| B25 | Minimal GitHub Actions CI: Python 3.12, locked uv install, Ruff, unit tests, PostgreSQL 17 health check and migrations, integration tests, Docker build; verify configuration and local commands, then observe an actual GitHub run | Written | B03; first push or pull request for hosted evidence | [Workflow](../.github/workflows/ci.yml), [commands](../README.md#continuous-integration); local checks passed; hosted run pending; personal notes updated; development commit titled `Add minimal GitHub Actions CI` |
 
 ## Current verification record
 
@@ -131,3 +132,24 @@ Follow-up verification: Ruff passed; all four foundation tests passed against th
 Configuration naming follow-up: removed the CACHE_ settings prefix and renamed variables to DATABASE_URL, DB_PASS, and DB_PORT throughout Compose, setup, examples, tests, and local configuration. Pool and timeout variables use their unprefixed setting names. Configuration guidance simplified; personal notes updated.
 
 Naming verification: Ruff and all four foundation tests passed; Compose configuration, image rebuild, migrations, and API startup passed. Rebuilt API readiness returned HTTP 200.
+
+## CI acceptance evidence
+
+B25 adds a single job for pull requests and pushes to `main`, read-only `contents` permission, a 15-minute timeout, and cancellation of superseded runs. Checkout credentials are not persisted. `UV_LOCKED=true` also applies to Makefile commands. Disposable PostgreSQL credentials are unrelated to local or production secrets. No deployment, matrix, or coverage threshold was added.
+
+Verification on 2026-10-06:
+
+| Check | Result and scope |
+| --- | --- |
+| Upstream action tag verification with `git ls-remote` | checkout v4.2.2 = `11bd71901bbe5b1630ceea73d27597364c9af683`; setup-uv v6.0.1 = `6b9c6063abd6010835644d4c2e1bef4cf5cd0fca` |
+| `actionlint` v1.7.7 | Passed; workflow configuration check only |
+| `uv sync --locked` with Python 3.12.13 and uv 0.9.5 | Passed in isolated `/tmp` environment; existing committed lockfile unchanged |
+| `make lint` and `make test` with `UV_LOCKED=true` | Ruff passed; 3 unit tests passed, 1 integration test deselected |
+| Disposable PostgreSQL 17 container health check | Healthy; separate empty database on localhost port 55433 |
+| `uv run alembic upgrade head` | Passed; revision `0001` confirmed against the disposable database |
+| `make test-integration` with `TEST_DATABASE_URL` | 1 passed, 3 deselected; real PostgreSQL readiness |
+| `docker build --tag cache-service:ci .` | Passed using the existing Dockerfile; Docker dependencies remain range-based |
+| `git diff --check` | Passed |
+| Actual GitHub Actions execution | Pending first remote push or pull request; no hosted success claimed |
+
+The initial sandbox action-tag lookup failed DNS resolution; approved execution resolved it. uv cache access also required approved execution. Tests retain one upstream Starlette TestClient deprecation warning. Private workflow explanation and troubleshooting notes updated. B25 remains Written until a hosted run passes; there is no dependency-resolution blocker.

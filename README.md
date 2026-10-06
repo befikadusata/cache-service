@@ -76,3 +76,22 @@ Foundation verification passed on 2026-10-06: dependency resolution and `uv.lock
 The migration environment follows [Alembic's async migration recipe](https://alembic.sqlalchemy.org/en/latest/cookbook.html#using-asyncio-with-alembic). Migrations run explicitly; API workers do not create tables during startup.
 
 Keep `.env` out of Git and avoid printing connection strings or expanded Compose configuration. Settings mask the database URL in diagnostics. Changing `DB_PASS` in `.env` does not change the password in an existing PostgreSQL volume; update the database role when rotating credentials.
+
+## Continuous integration
+
+[CI workflow](.github/workflows/ci.yml) runs on every pull request and push to `main`. One Ubuntu job uses Python 3.12, uv 0.9.5, and the committed `uv.lock`. It runs these established commands:
+
+```sh
+uv sync --locked
+make lint
+make test
+uv run alembic upgrade head
+make test-integration
+docker build --tag cache-service:ci .
+```
+
+CI sets `UV_PYTHON=3.12` and `UV_LOCKED=true`, so subsequent `uv run` commands also reject a stale lockfile. Migrations use `DATABASE_URL`; integration tests use `TEST_DATABASE_URL`, both pointing to a health-checked PostgreSQL 17 service. Its disposable credentials are only for that run and require no repository secrets. For local checks, use your own migrated database URLs; avoid copying CI credentials into persistent environments.
+
+The job has read-only repository permissions, a 15-minute timeout, and cancels superseded runs for the same branch or pull request. Checkout does not retain credentials. External actions are pinned to commit SHAs verified against their upstream release tags. See [setup-uv documentation](https://github.com/astral-sh/setup-uv/tree/v6.0.1) and [GitHub PostgreSQL service documentation](https://docs.github.com/en/actions/tutorials/use-containerized-services/create-postgresql-service-containers).
+
+Local acceptance evidence is recorded in the [backlog](docs/backlog.md#ci-acceptance-evidence). Workflow validation and local command success do not establish a successful GitHub Actions run. Docker build verification uses the existing Dockerfile, which installs dependency ranges rather than the uv lockfile.
