@@ -59,10 +59,10 @@ Dependencies identify the required predecessor, rather than requiring every earl
 | B03 | Install dependencies, generate lockfile, run lint and foundation tests, apply clean migration, check both health endpoints and image startup | Done | B02; execution/network access | Runtime checks passed on 2026-10-06; `uv.lock` generated; PostgreSQL host port 55432; see verification record below; personal notes updated |
 | B04 | Freeze POST and GET response schemas, strict input validation, empty behavior, configurable limits and request deadlines | Done | Selected B01 assumptions | [Contract](api-contract.md), [models](../src/cache_service/schemas.py), [settings](../src/cache_service/config.py), [tests](../tests/test_schemas.py); 18 focused tests and Ruff passed; personal notes updated; commit titled `Define payload API contract and validation`. Endpoint enforcement remains B07/B11 |
 | B05 | Define canonical encoding, version and digest identities; verify list boundaries, order, whitespace and collision handling | Done | B04 | [Identity helpers](../src/cache_service/identity.py), [tests](../tests/test_identity.py), exact format in [architecture](architecture.md); 18 focused tests and 44 unit tests passed; personal notes updated; commit titled `Add versioned input identities` on `feat/versioned-identities` |
-| B06 | Replaceable uppercase transformer and alternating composition; meaningful isolated tests | Ready | B04 | Sample output and empty input policy in requirements |
-| B07 | Create and read complete payloads; generated UUID plus unique input digest; duplicate creation returns stored ID | Waiting | B03–B06 | Initial schema written; request flow pending |
+| B06 | Replaceable uppercase transformer and alternating composition; meaningful isolated tests | Done | B04 | [Transformer and composition](../src/cache_service/transformation.py), [tests](../tests/test_transformation.py); 21 focused tests, 65 unit tests and Ruff passed; personal notes updated; commit titled `feat: add replaceable transformer and payload composition` on `feat/b06-transformer-composition` |
+| B07 | Create and read complete payloads; generated UUID plus unique input digest; duplicate creation returns stored ID | Ready | B03–B06 | Initial schema written; predecessors complete; request flow pending |
 | B08 | API tests for sample output, invalid types/lengths, empty input, unknown ID, retry and identity policy | Waiting | B07 | [Verification scenarios](verification.md) |
-| B09 | Batch cache reads and request deduplication; persist successful results with versioned keys and authoritative readback | Waiting | B03, B05, B06 | Implementation pending |
+| B09 | Batch cache reads and request deduplication; persist successful results with versioned keys and authoritative readback | Ready | B03, B05, B06 | Predecessors complete; implementation pending |
 | B10 | One advisory lock at a time, recheck after acquire, same connection for writes; no transaction over external call | Waiting | B09 | Coordination design recorded; implementation pending |
 | B11 | Bounded admission and waits, cancellation-safe cleanup, invalidate uncertain ownership; map operational failures to documented HTTP responses | Waiting | B10, B04 | Numeric budgets and cleanup code pending |
 | B12 | Preserve successful transformations on later failure; publish complete payload atomically; verify safe retries | Waiting | B07, B09–B11 | Policy recorded; implementation pending |
@@ -118,9 +118,22 @@ The sandbox-only health test stalled and was interrupted; the approved rerun pas
 
 ## Next work and completion gate
 
-B03 runtime verification is complete. B04 contract and model checks and B05 identity helpers are complete. Next implement B06, then the payload flow and proceed through cache coordination, CLI and deployment evidence.
+B03 runtime verification, B04 contract and model checks, B05 identity helpers, and B06 transformation and composition are complete. Next implement B07 payload creation and retrieval, then proceed through cache coordination, CLI and deployment evidence. B09 prerequisites are also complete.
 
 Submission is ready only when mandatory behavior, documented reliability guarantees, reproducible setup, and final checks pass; repository history is retained; private material is excluded; video meets the brief; and actual hours are reconciled. B24 remains separate from implementation completion because publishing and sending are delivery actions.
+
+## B06 acceptance evidence
+
+Verification on 2026-10-06:
+
+| Check | Result and scope |
+| --- | --- |
+| `.venv/bin/pytest tests/test_transformation.py` | 21 passed: uppercase, Unicode expansion, preserved whitespace, replacement, failure propagation, alternating order, duplicates, empty elements and unequal lengths |
+| `.venv/bin/ruff check .` | Passed |
+| `.venv/bin/pytest -m 'not integration'` | Sandbox run stalled in the existing TestClient health test and was interrupted; approved rerun outside the sandbox passed: 65 passed, 1 integration test deselected, 1 upstream TestClient deprecation warning |
+
+Personal transformation notes updated outside Git. No schema or database behavior changed;
+payload routes, caching, operational error mapping and deadlines remain later work.
 
 
 ## Secrets and configuration follow-up

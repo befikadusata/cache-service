@@ -8,6 +8,19 @@ HTTP handling validates input and translates application outcomes into responses
 
 Start with these responsibilities rather than a framework of generic repositories or additional infrastructure. The implementation must remain straightforward to trace and change.
 
+B06 implements `src/cache_service/transformation.py`: `Transformer` is an async callable
+protocol, and `uppercase_transform` implements the `uppercase-v1` identity semantics using
+Python's Unicode `str.upper()`. Whitespace and punctuation remain intact; some Unicode
+characters expand, such as `ß` becoming `SS`. Replacements must use the matching identity
+version when their semantics change. Transformer exceptions propagate to the application
+layer for later HTTP mapping and successful-result-only caching.
+
+`compose_output` accepts already transformed sequences, alternates their elements and joins
+them with `, `. It preserves duplicates and empty elements, returns `""` for two empty
+sequences, and rejects unequal lengths rather than silently truncating. Keeping composition
+separate lets subsequent request code combine cached and newly transformed results without
+invoking the transformer again. Endpoint orchestration remains B07 work.
+
 ## Selected decisions and alternatives
 
 | Decision | Selected approach | Reason and trade-off |
