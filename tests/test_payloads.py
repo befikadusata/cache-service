@@ -28,6 +28,10 @@ async def payload_app():
                     text("DELETE FROM payloads WHERE canonical_input LIKE :marker"),
                     {"marker": f"%{marker}%"},
                 )
+                await connection.execute(
+                    text("DELETE FROM transformations WHERE source LIKE :marker"),
+                    {"marker": f"%{marker}%"},
+                )
 
 
 @pytest.mark.integration
@@ -41,7 +45,10 @@ async def test_create_read_reuse_and_restart(payload_app):
 
     settings = Settings(database_url=os.environ["TEST_DATABASE_URL"])
     application = create_app(settings, transformer=transform)
-    data = {"list1": [f"hello {marker}", "world"], "list2": ["one", "two"]}
+    data = {
+        "list1": [f"hello {marker}", f"world {marker}"],
+        "list2": [f"one {marker}", f"two {marker}"],
+    }
     async with application.router.lifespan_context(application):
         async with AsyncClient(
             transport=ASGITransport(app=application), base_url="http://test"
@@ -51,11 +58,14 @@ async def test_create_read_reuse_and_restart(payload_app):
             identifier = response.json()["id"]
             UUID(identifier)
             assert (await c.get(f"/payloads/{identifier}")).json() == {
-                "output": f"HELLO {marker.upper()}, ONE, WORLD, TWO"
+                "output": (
+                    f"HELLO {marker.upper()}, ONE {marker.upper()}, "
+                    f"WORLD {marker.upper()}, TWO {marker.upper()}"
+                )
             }
             assert (await c.post("/payloads", json=data)).json() == {"id": identifier}
             assert calls == [*data["list1"], *data["list2"]]
-            distinct = {**data, "list1": [f"HELLO {marker}", "world"]}
+            distinct = {**data, "list1": [f"HELLO {marker}", f"world {marker}"]}
             assert (await c.post("/payloads", json=distinct)).json()["id"] != identifier
 
     # A fresh application and pool reuse persisted payloads, without transformation.
@@ -127,14 +137,14 @@ async def test_failed_transform_does_not_publish(payload_app):
     app, marker = payload_app
 
     async def transform(source):
-        if source == "fail":
+        if source == f"fail {marker}":
             raise OSError("private transformer diagnostics")
         return source.upper()
 
     application = create_app(
         Settings(database_url=os.environ["TEST_DATABASE_URL"]), transformer=transform
     )
-    data = {"list1": [marker], "list2": ["fail"]}
+    data = {"list1": [marker], "list2": [f"fail {marker}"]}
     async with application.router.lifespan_context(application):
         async with AsyncClient(
             transport=ASGITransport(app=application), base_url="http://test"
@@ -155,7 +165,7 @@ async def test_failed_transform_does_not_publish(payload_app):
         assert response.status_code == 200
         identifier = response.json()["id"]
         assert (await client.get(f"/payloads/{identifier}")).json() == {
-            "output": f"{marker.upper()}, FAIL"
+            "output": f"{marker.upper()}, FAIL {marker.upper()}"
         }
         assert (await client.post("/payloads", json=data)).json() == {"id": identifier}
 

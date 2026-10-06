@@ -1,8 +1,8 @@
 # Payload API contract (B04)
 
 Payload routes are implemented in B07, including configured input validation and overall
-POST/GET deadlines. Per-string caching and coordination remain B09–B14; their capacity,
-cleanup, and operational failure evidence follows in those work items.
+POST/GET deadlines. B09 implements per-string caching and request deduplication. Coordination,
+capacity, cleanup, and operational failure evidence remain B10–B14 work.
 
 `POST /payloads` accepts a JSON object containing exactly `list1` and `list2`.
 Both must be arrays of strings of equal length. Missing fields, extra fields,

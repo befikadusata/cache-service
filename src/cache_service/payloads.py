@@ -5,17 +5,10 @@ from uuid import UUID, uuid4
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from cache_service.cache import DatabaseUnavailable, cached_transformations
 from cache_service.identity import TRANSFORMER_VERSION, payload_identity
 from cache_service.schemas import PayloadCreate
 from cache_service.transformation import Transformer, compose_output
-
-
-class TransformationFailed(RuntimeError):
-    """The replaceable transformer failed before publication."""
-
-
-class DatabaseUnavailable(RuntimeError):
-    """Database connection establishment exceeded its own timeout."""
 
 
 async def create_payload(
@@ -36,16 +29,13 @@ async def create_payload(
         identity.verify_stored(stored["canonical_input"])
         return stored["id"]
 
-    # No checked-out connection or transaction spans transformation.
-    transformed: list[list[str]] = []
-    try:
-        for values in (request.list1, request.list2):
-            transformed.append([await transformer(value) for value in values])
-    except TimeoutError:
-        raise
-    except Exception as exc:
-        raise TransformationFailed("Transformation failed") from exc
-    output = compose_output(*transformed)
+    results = await cached_transformations(
+        engine, [*request.list1, *request.list2], transformer, version
+    )
+    output = compose_output(
+        [results[source] for source in request.list1],
+        [results[source] for source in request.list2],
+    )
 
     try:
         async with engine.begin() as connection:
