@@ -12,6 +12,8 @@ Exit evidence: each mandatory requirement has an acceptance check; consequential
 
 Create the minimal application, database configuration and lifecycle, dependency setup, and test harness. Keep configuration explicit and local secrets out of version control. Establish an initial schema migration and an explicit migration command. Add PostgreSQL Compose support at this stage so real database tests are available throughout development; complete deployment documentation in Stage 6.
 
+Current status: foundation code, migration, Compose, and tests are written. Syntax and Compose configuration checks pass. Runtime exit evidence is pending because this workspace cannot fetch packages, access the Docker daemon, or open PostgreSQL listening sockets.
+
 Exit evidence: application starts against a clean database and a real database integration test passes.
 
 ## Stage 3 Complete payload flow
