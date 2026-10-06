@@ -29,6 +29,14 @@ Compose waits for PostgreSQL, runs migrations in a separate process, then starts
 
 Stop with `docker compose down`. Removing the named volume deletes stored data.
 
+## Command shortcuts
+
+An optional Makefile provides `make up`, `make down`, `make logs`, `make test`, `make test-integration`, `make lint`, and `make migrate`. Run `make help` to list them. Run these commands from this directory.
+
+`make up` starts Compose in the background. `make migrate` applies migrations through the Compose migration service; local Python development uses `uv run alembic upgrade head`. Integration tests require an exported `TEST_DATABASE_URL` pointing to a migrated database. Stopping containers preserves the database volume.
+
+The direct commands in this guide remain available without Make.
+
 ## Local Python development
 
 Requires Python 3.12–3.14 and uv. Start PostgreSQL first:
