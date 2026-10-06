@@ -78,7 +78,7 @@ Dependencies identify the required predecessor, rather than requiring every earl
 | B22 | Prepare and record English walkthrough with camera and screen, code trace, CLI and tests; verify duration at most 15 minutes | Waiting | B20 | Personal rehearsal remains in sibling private workspace; candidate records video |
 | B23 | Track actual time from available records; candidate reconciles previous work; report honest total without estimating missing history as fact | Ready | Ongoing | No authoritative total yet; candidate confirmation required |
 | B24 | Create/publish neutral public repository and video, verify both links, draft reply with actual hours, submit when explicitly authorized | Waiting | B20–B23 | No public repository, video or submission yet |
-| B25 | Minimal GitHub Actions CI: Python 3.12, locked uv install, Ruff, unit tests, PostgreSQL 17 health check and migrations, integration tests, Docker build; verify configuration and local commands, then observe an actual GitHub run | Written | B03; first push or pull request for hosted evidence | [Workflow](../.github/workflows/ci.yml), [commands](../README.md#continuous-integration); local checks passed; hosted run pending; personal notes updated; development commit titled `Add minimal GitHub Actions CI` |
+| B25 | Minimal GitHub Actions CI: Python 3.12, locked uv install, Ruff, unit tests, PostgreSQL 17 health check and migrations, integration tests, Docker build; verify configuration and local commands, then observe an actual GitHub run | Done | B03; first push or pull request for hosted evidence | [Workflow](../.github/workflows/ci.yml), [commands](../README.md#continuous-integration); local checks and [hosted run](https://github.com/befikadusata/cache-service/actions/runs/37461411063) passed; personal notes updated; development commit titled `Add minimal GitHub Actions CI` |
 
 ## Current verification record
 
@@ -150,9 +150,9 @@ Verification on 2026-10-06:
 | `make test-integration` with `TEST_DATABASE_URL` | 1 passed, 3 deselected; real PostgreSQL readiness |
 | `docker build --tag cache-service:ci .` | Passed using the existing Dockerfile; Docker dependencies remain range-based |
 | `git diff --check` | Passed |
-| Actual GitHub Actions execution | Pending first remote push or pull request; no hosted success claimed |
+| Actual GitHub Actions execution | Passed: [main run 37461411063](https://github.com/befikadusata/cache-service/actions/runs/37461411063), including DB_* configuration, migrations, tests and Docker build |
 
-The initial sandbox action-tag lookup failed DNS resolution; approved execution resolved it. uv cache access also required approved execution. Tests retain one upstream Starlette TestClient deprecation warning. Private workflow explanation and troubleshooting notes updated. B25 remains Written until a hosted run passes; there is no dependency-resolution blocker.
+The initial sandbox action-tag lookup failed DNS resolution; approved execution resolved it. uv cache access also required approved execution. Tests retain one upstream Starlette TestClient deprecation warning. Private workflow explanation and troubleshooting notes updated. B25 is Done after hosted verification; there is no dependency-resolution blocker.
 
 ## B04 acceptance evidence
 
@@ -164,4 +164,4 @@ Project configuration now exposes DB_HOST, DB_PORT, DB_USER, DB_NAME and DB_PASS
 
 Verification: full `.venv/bin/pytest -q` passed all 27 tests with TEST_DATABASE_URL set from masked local settings, including real PostgreSQL readiness. Readiness also returned 200 using DB_* settings without a DATABASE_URL override. Ruff, actionlint v1.7.7, Compose configuration and git diff whitespace checks passed. One upstream Starlette TestClient deprecation warning remains.
 
-Hosted CI run `37461260126` failed during container creation: GitHub runner argument parsing rejected single-quoted health-command grouping (`unknown shorthand flag: U`). Follow-up uses double-quoted grouping for the Docker option; hosted rerun pending.
+Hosted CI run `37461260126` failed during container creation: GitHub runner argument parsing rejected single-quoted health-command grouping (`unknown shorthand flag: U`). Follow-up uses double-quoted grouping for the Docker option; Resolved in commit `2af2e17`: [hosted rerun 37461411063](https://github.com/befikadusata/cache-service/actions/runs/37461411063) passed every step. Database naming implementation is commit `c1b59e4`. Personal notes updated.
