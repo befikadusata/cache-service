@@ -74,10 +74,10 @@ Dependencies identify the required predecessor, rather than requiring every earl
 | B18 | Clean Docker build and migration/start smoke test; storage reuse after restart; document supported worker/connection budget | Done | B03, B12, B17 | [Deployment smoke script](../scripts/verify_deployment.py), [procedure](verification.md#docker-deployment), worker/connection guidance in README and architecture; all runtime checks and Ruff passed on 2026-10-07; see B18 evidence below; personal notes updated; commit titled `Verify Docker deployment and restart persistence` |
 | B19 | Complete public setup, usage, configuration, architecture and limitations; reconcile every guarantee with tests | Done | B14, B17, B18 | [Configuration](configuration.md), [guarantee evidence](verification.md#guarantee-evidence), README, API contract and architecture reconciled with current code/tests; documentation checks, CLI help, Ruff and whitespace checks passed; see B19 evidence below; personal notes updated |
 | B20 | Final code review and requirement audit; full required suite passes; remove unnecessary complexity and inspect repository contents | Done | B13, B14, B17–B19 | [Final review](final-review.md); new real PostgreSQL GET-deadline/cleanup/retry test; 202 full-suite tests, Ruff, whitespace, locked dependency check, Compose validation and Docker build passed; tracked-file inspection passed; personal notes updated |
-| B21 | Preserve real incremental commits; verify neutral repository name and public artifacts contain no personal preparation or secrets | Ready | Ongoing; final audit B20 | Development commits recorded below; private preparation is outside repository; credential configuration hardened and personal notes updated |
+| B21 | Preserve real incremental commits; verify neutral repository name and public artifacts contain no personal preparation or active secrets; account for retired exposed credentials | Done | Ongoing; final audit B20 | [Repository audit](repository-audit.md): neutral public name verified; 47 commits and 174 historical blobs inspected; no current credential/key/token or private-file matches; known historical development password remains public and is independently verified rejected by local PostgreSQL; personal notes updated |
 | B22 | Prepare and record English walkthrough with camera and screen, code trace, CLI and tests; verify duration at most 15 minutes | Ready | B20 | Personal rehearsal remains in sibling private workspace; candidate records video |
 | B23 | Track actual time from available records; candidate reconciles previous work; report honest total without estimating missing history as fact | Ready | Ongoing | No authoritative total yet; candidate confirmation required |
-| B24 | Create/publish neutral public repository and video, verify both links, draft reply with actual hours, submit when explicitly authorized | Waiting | B20–B23 | No public repository, video or submission yet |
+| B24 | Publish final repository revision and video, verify both links, draft reply with actual hours, submit when explicitly authorized | Waiting | B20–B23 | Neutral public repository exists; published main is B17 (`425e0b3`), with B18–B20 local at the B21 audit; final revision publication, video and submission remain |
 | B25 | Minimal GitHub Actions CI: Python 3.12, locked uv install, Ruff, unit tests, PostgreSQL 17 health check and migrations, integration tests, Docker build; verify configuration and local commands, then observe an actual GitHub run | Done | B03; first push or pull request for hosted evidence | [Workflow](../.github/workflows/ci.yml), [commands](../README.md#continuous-integration); local checks and [hosted run](https://github.com/befikadusata/cache-service/actions/runs/37461411063) passed; personal notes updated; development commit titled `Add minimal GitHub Actions CI` |
 
 ## Current verification record
@@ -122,10 +122,32 @@ B03–B14 are complete, including partial-success preservation, atomic publicati
 controlled PostgreSQL failure recovery and separate-process coordination. B01 CLI output
 policy, B15 CLI parsing, B16 CLI execution and B17 live-service verification are complete.
 B18 deployment verification, B19 documentation reconciliation and B20 final implementation
-review are complete. Next is B21 repository history and public-artifact audit. B22 video
-preparation is ready; B23 actual-hours reconciliation and B24 delivery remain.
+review and B21 repository history/public-artifact audit are complete. Next is B22 video
+preparation and recording; B23 actual-hours reconciliation and B24 final publication/delivery
+remain.
 
 Submission is ready only when mandatory behavior, documented reliability guarantees, reproducible setup, and final checks pass; repository history is retained; private material is excluded; video meets the brief; and actual hours are reconciled. B24 remains separate from implementation completion because publishing and sending are delivery actions.
+
+## B21 acceptance evidence
+
+Audit on 2026-10-07 is recorded in [the repository and history audit](repository-audit.md).
+GitHub metadata verifies public `befikadusata/cache-service`, neutral name `cache-service`
+and default branch `main`. Published main is `425e0b3`; local B18–B20 commits are unpublished.
+All 14 remote branch heads belong to audited history; no tags, releases or release assets exist.
+
+- Preserved 47 real commits, including 33 non-merge development commits and 14 merges.
+  All locally reachable commits are ancestors of current main; no rewrite or push occurred.
+- Inspected 47 tracked files and 174 distinct historical blobs, plus commit content, for current
+  local credentials, common key/token patterns and private/local artifacts; no such matches.
+  Compared historical blobs against 15 private files; no exact copies. Reviewed public prose.
+- Manually reviewed 19 database-URL and nine password-assignment candidate blobs with values
+  redacted. The previously recorded fixed development password remains in old history; current
+  secrets are absent. Current database authentication passed and historical password
+  authentication was independently rejected. No clean-history or exhaustive-scanner claim.
+- Ignore rules exclude local credentials and private preparation. Personal audit notes updated
+  outside Git. Documentation checks and whitespace validation passed; runtime code unchanged.
+- Corrected stale B24 publication status. B22 video, B23 actual hours and B24 final publication
+  and submission remain; existing history and database volumes are preserved.
 
 ## B20 acceptance evidence
 

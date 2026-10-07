@@ -18,7 +18,7 @@ passes the final local suite. Delivery requirements remain separate and incomple
 | R08 all CLI modes | Host, repeat, file/stdin/inline JSON, file/stdout and help; unit and live executable tests | Implemented; passing |
 | R09 unit and integration tests | Final combined run includes PostgreSQL, spawned-process coordination and live Uvicorn/CLI tests | 202 passing; none skipped |
 | R10 assumptions, explanation and maintainability | README assumptions, architecture, configuration, guarantee mapping; code/resource review below | Implemented; no unresolved correctness finding |
-| R11 meaningful history and neutral public artifacts | Current tracked-file inspection passed; development history retained | B21 final history/public-artifact audit and B24 delivery remain |
+| R11 meaningful history and neutral public artifacts | [B21 repository audit](repository-audit.md) verifies neutral public name, retained history, private-file exclusion and rejection of the retired historical password | Audit complete; B24 final revision publication remains |
 | R12 English camera/screen video at most 15 minutes | Requires candidate recording and duration verification | B22 remains |
 | R13 repository/video links and actual hours | Requires verified delivery links and an authoritative hours total | B23–B24 remain |
 
