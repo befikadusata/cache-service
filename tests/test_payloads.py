@@ -1,10 +1,12 @@
 import asyncio
+import json
 import os
 from uuid import UUID, uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import event, text
+from sqlalchemy.exc import MultipleResultsFound, NoResultFound
 
 from cache_service.config import Settings
 from cache_service.identity import payload_identity
@@ -379,6 +381,52 @@ async def test_invalid_payload_is_rejected_before_database_access(data):
             response = await c.post("/payloads", json=data)
             assert response.status_code == 422
             assert isinstance(response.json()["detail"], list)
+
+
+@pytest.mark.parametrize("path", ["/payload", "/payloads"])
+@pytest.mark.parametrize("data", [
+    {"list_1": ["\x00"], "list_2": ["valid"]},
+    {"list_1": ["valid"], "list_2": ["\ud800"]},
+    {"list_1": ["\udfff"], "list_2": []},
+    {"list_1": [], "list_2": [], "\ud800": {"nested": "\udfff"}},
+    {"list_1": [1], "list_2": ["\ud800"]},
+])
+async def test_unsupported_strings_and_surrogate_validation_errors_return_422(path, data):
+    app = create_app(Settings(_env_file=None, db_pass="test", db_port=1))
+    async with app.router.lifespan_context(app):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            response = await c.post(
+                path, content=json.dumps(data), headers={"Content-Type": "application/json"}
+            )
+            assert response.status_code == 422
+            assert response.headers["content-type"] == "application/json"
+            assert isinstance(response.json()["detail"], list)
+
+
+@pytest.mark.parametrize(
+    "error_type", [NoResultFound, MultipleResultsFound, ValueError, RuntimeError]
+)
+@pytest.mark.parametrize("operation", ["create", "read"])
+async def test_invariant_failures_return_generic_json_500(
+    error_type, operation, monkeypatch, caplog
+):
+    async def fail(*args):
+        raise error_type("private input must not appear in diagnostics")
+
+    monkeypatch.setattr(f"cache_service.main.{operation}_payload", fail)
+    app = create_app(Settings(_env_file=None, db_pass="test", db_port=1))
+    async with app.router.lifespan_context(app):
+        transport = ASGITransport(app=app, raise_app_exceptions=False)
+        async with AsyncClient(transport=transport, base_url="http://test") as c:
+            if operation == "create":
+                response = await c.post("/payload", json={"list_1": [], "list_2": []})
+            else:
+                response = await c.get(f"/payload/{uuid4()}")
+            assert response.status_code == 500
+            assert response.json() == {"detail": "Internal server error"}
+            assert "Retry-After" not in response.headers
+    assert "private input" not in caplog.text
+    assert f"Payload operation failed: {error_type.__name__}" in caplog.text
 
 
 @pytest.mark.parametrize(

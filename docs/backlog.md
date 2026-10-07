@@ -80,6 +80,7 @@ Dependencies identify the required predecessor, rather than requiring every earl
 | B24 | Publish final repository revision and video, verify both links, draft reply with actual hours, submit when explicitly authorized | Waiting | B20–B23 | Neutral public repository exists; published main is B17 (`425e0b3`), with B18–B20 local at the B21 audit; final revision publication, video and submission remain |
 | B25 | Minimal GitHub Actions CI: Python 3.12, locked uv install, Ruff, unit tests, PostgreSQL 17 health check and migrations, integration tests, Docker build; verify configuration and local commands, then observe an actual GitHub run | Done | B03; first push or pull request for hosted evidence | [Workflow](../.github/workflows/ci.yml), [commands](../README.md#continuous-integration); local checks and [hosted run](https://github.com/befikadusata/cache-service/actions/runs/37461411063) passed; personal notes updated; development commit titled `Add minimal GitHub Actions CI` |
 | B26 | Align assessment API paths, JSON fields, CLI command and short options; verify the exact sample and retain legacy identity reuse | Done | B20 | `main.py`, `schemas.py`, `cli.py`, packaged `cache-cli`, schema/parser/live-CLI tests and [compatibility verification](verification.md#assessment-compatibility-verification); 211 tests, Ruff, whitespace and locked offline install passed on 2026-10-07; commit titled `fix: add payload routes, JSON field aliases, and cache-cli options` |
+| B27 | Reconcile string validation and invariant error behavior with the API contract | Done | B26 | Shared API/CLI NUL and surrogate rejection, safe JSON 422 serialization, generic JSON 500 for invariant/unexpected failures; 240 full-suite tests, Ruff, whitespace and documentation checks passed; see acceptance evidence below |
 
 ## Current verification record
 
@@ -565,3 +566,32 @@ No Docker rebuild or hosted CI rerun is claimed. Recorded in commit titled
 `fix: add payload routes, JSON field aliases, and cache-cli options`. B22–B24 recording, hours reconciliation and publication/submission remain pending.
 This adds compatibility at existing boundaries without a new architecture or request flow;
 existing personal explanations remain applicable.
+
+## B27 documentation-review fixes
+
+Follow-up on 2026-10-07 fixes implementation mismatches while retaining the documented
+422 validation and JSON 500 invariant-error contracts:
+
+- Shared payload validation rejects NUL and lone surrogate code points before database
+  access in API and CLI input. Other Unicode scalar values remain unchanged. README,
+  requirements, API contract and architecture now state the same string restriction.
+- Validation responses use ASCII-escaped JSON so surrogate values in rejected lists,
+  extra fields or nested input cannot turn validation errors into plaintext 500 responses.
+- Missing/multiple authoritative rows and unexpected application exceptions return
+  generic JSON 500 without Retry-After. Database availability errors retain 503;
+  warnings log exception types without exposing exception messages.
+- Added 29 regression cases across schema, HTTP and CLI tests; updated the
+  [guarantee mapping](verification.md#guarantee-evidence).
+
+Executed checks:
+
+| Check | Result and scope |
+| --- | --- |
+| Focused schema/payload/CLI execution suite with `-m 'not integration'` | 101 passed, 21 deselected |
+| Full suite with `TEST_DATABASE_URL` supplied privately from validated settings | Sandbox attempt failed at the first database test; approved rerun outside the sandbox passed: 240 tests in 17.99 seconds, one existing upstream TestClient deprecation warning |
+| `.venv/bin/ruff check .` and `git diff --check` | Passed |
+| Documentation checks | All 112 local link targets and 41 named verification test references exist |
+
+No dependency or migration changes were needed. No new Docker build, deployment or
+hosted CI run is claimed. Historical B19–B26 evidence retains its original scope;
+video, hours reconciliation and final publication/submission remain separate work.

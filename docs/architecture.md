@@ -51,9 +51,11 @@ B13 verifies forced backend loss and ownership loss. B14 verifies separate spawn
 processes sharing PostgreSQL, including actual lock contention, per-source call counts,
 identical IDs and reuse after process restart; see `tests/test_multiprocess.py`.
 Healthy concurrent sessions now serialize shared misses and reuse committed results.
-Configured overall deadlines and generic error responses are wired; 503 includes Retry-After. PostgreSQL text storage does not support every possible
-Python string, including NUL and lone surrogate values; such storage failures return a generic
-error and never a successful identifier.
+Configured overall deadlines and generic error responses are wired; 503 includes Retry-After.
+PostgreSQL text storage cannot store NUL or lone surrogate values. API and CLI input validation
+reject these strings before database access; the API returns a JSON 422 envelope with escaped
+Unicode so rejected surrogate values cannot break response serialization. Missing or multiple
+authoritative rows and unexpected application exceptions return generic JSON 500 responses.
 
 ## Selected decisions and alternatives
 
@@ -83,6 +85,34 @@ Use SHA-256 for database lookup keys rather than indexing unbounded source text.
 Transformer version is an explicit implementation constant identifying behavior. Change it when transformation semantics change. Include it in both identity types and advisory-lock derivation. Existing payloads remain readable by identifier after a version change; the service does not automatically migrate or delete old cache entries.
 
 Advisory keys hash the byte prefix `b"cache-service:transformation-lock:v1\x00"` followed by the full transformation digest with SHA-256. Interpret the first eight bytes as a signed big-endian 64-bit integer, compatible with PostgreSQL's single-bigint advisory lock functions. This derivation is stable across processes and reserved for transformation coordination. Different identities mapping to the same advisory key merely wait for each other because cache access still uses the full digest and verifies retained identity. Lock keys never establish cache equality. The encoding, transformer version, and lock derivation must agree across workers; changing them requires a coordinated rollout.
+
+## Payload creation flow
+
+```mermaid
+flowchart TD
+    input["Validate input and compute versioned payload identity"] --> payload{"Complete payload exists?"}
+    payload -->|Yes| existing["Verify stored identity and return stored UUID"]
+    payload -->|No| batch["Deduplicate exact strings; batch-load and verify cached results"]
+    batch --> missing{"Any missing strings left?"}
+    missing -->|No| compose["Restore original order and duplicates; compose interleaved output"]
+    missing -->|Yes| acquire["Obtain admission slot and connection; acquire one session advisory lock"]
+    acquire --> recheck["Recheck and verify cache in a short transaction"]
+    recheck --> cached{"Result now cached?"}
+    cached -->|Yes| reuse["Reuse committed result"]
+    cached -->|No| transform["Transform with a deadline; retain connection and lock, with no open transaction"]
+    transform --> persist["Insert successful result; read and verify authoritative row; commit"]
+    reuse --> release["Release lock, return connection, and release admission"]
+    persist --> release
+    release --> missing
+    compose --> publish["Insert complete payload; read and verify authoritative row; commit"]
+    publish --> returned["Return stored UUID"]
+```
+
+Each successful transformation commits before the next missing string is processed.
+If later work fails, those committed results remain reusable; the request publishes
+no partial payload. Failures, timeouts, and cancellation trigger bounded cleanup;
+interrupted or uncertain lock sessions are invalidated. The flowchart shows the
+successful path; the sections below describe failure handling and concurrency limits.
 
 ## Request flow
 

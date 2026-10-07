@@ -13,6 +13,11 @@ non-string elements, nulls, unequal lengths and exceeded limits return 422 using
 FastAPI's validation error envelope (`detail` is a list). No coercion is allowed.
 Whitespace, case, Unicode and duplicates are preserved. Two empty arrays are valid
 and produce an empty output; empty strings are valid elements.
+Strings containing NUL (U+0000) or lone surrogate code points (U+D800–U+DFFF)
+return 422 before database access because PostgreSQL cannot store them. Valid Unicode
+scalar values, including supplementary characters such as emoji, remain supported.
+The CLI applies the same string restrictions. Validation responses escape Unicode
+so even rejected surrogate values can be represented safely in the JSON envelope.
 
 Successful creation and reuse both return 200 with `{"id": "<uuid>"}`.
 Using one status lets the CLI treat retries identically. The identifier is a generated
@@ -62,6 +67,8 @@ Operational errors use `{"detail": "<generic message>"}`: 503 for admission,
 pool, lock-wait or database unavailability; 504 for transformation or overall
 request deadline; 502 for transformer failure; 500 for invariant or digest collision
 failure. Operational responses and application warning messages omit raw input and database credentials.
+Missing or multiple authoritative rows and other unexpected application exceptions return
+generic JSON 500 responses without Retry-After; they are not classified as database unavailability.
 FastAPI validation errors may include the submitted value in their `input` field.
 Clients may retry 502/503/504 with bounded backoff using identical input; validation
 failures require correcting input. No uncoordinated fallback is permitted.

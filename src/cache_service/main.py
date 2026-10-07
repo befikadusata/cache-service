@@ -1,15 +1,17 @@
 import asyncio
+import json
 import logging
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import Body, Depends, FastAPI, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import ValidationError
 from sqlalchemy import text
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import MultipleResultsFound, NoResultFound, SQLAlchemyError
 
 from cache_service.cache import DatabaseUnavailable, TransformationFailed
 from cache_service.config import Settings
@@ -44,6 +46,15 @@ def create_app(
 
     app = FastAPI(title="Persistent caching service", lifespan=lifespan)
 
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(request: Request, exc: RequestValidationError) -> Response:
+        # ASCII escaping preserves invalid submitted surrogates in the error envelope.
+        return Response(
+            content=json.dumps({"detail": jsonable_encoder(exc.errors())}, ensure_ascii=True),
+            status_code=422,
+            media_type="application/json",
+        )
+
     async def validate_payload(
         body: Annotated[Any, Body(json_schema_extra=PayloadCreate.model_json_schema())],
     ) -> PayloadCreate:
@@ -58,10 +69,12 @@ def create_app(
             status, detail = 504, "Request timed out"
         elif isinstance(exc, TransformationFailed):
             status, detail = 502, "Transformation failed"
-        elif isinstance(exc, IdentityCollisionError):
+        elif isinstance(exc, (IdentityCollisionError, NoResultFound, MultipleResultsFound)):
             status, detail = 500, "Internal server error"
-        else:
+        elif isinstance(exc, (SQLAlchemyError, DatabaseUnavailable, OSError)):
             status, detail = 503, "Database unavailable"
+        else:
+            status, detail = 500, "Internal server error"
         logger.warning("Payload operation failed: %s", type(exc).__name__)
         return JSONResponse(
             status_code=status, content={"detail": detail},
@@ -75,6 +88,7 @@ def create_app(
         TimeoutError,
         TransformationFailed,
         IdentityCollisionError,
+        Exception,
     ):
         app.add_exception_handler(error_type, operational_error)
 

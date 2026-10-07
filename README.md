@@ -1,5 +1,7 @@
 # Persistent Payload Caching Service
 
+[![CI](https://github.com/befikadusata/cache-service/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/befikadusata/cache-service/actions/workflows/ci.yml)
+
 A FastAPI service that uppercases two equal-length lists of strings, interleaves
 their results, and stores the generated payloads in PostgreSQL using SQLAlchemy.
 Successful string transformations are cached across requests and application
@@ -71,6 +73,8 @@ Both lists must contain strings and have equal lengths. Empty lists produce an e
 output. Creation and reuse return HTTP 200; invalid input returns 422, and an unknown
 UUID returns 404. By default, each list allows 100 items, each string allows 10,000
 characters, and both lists together allow 100,000 characters.
+Strings containing NUL or lone Unicode surrogates are rejected by both the API and CLI
+because PostgreSQL cannot store them; other Unicode characters, including emoji, are supported.
 
 See the [API contract](docs/api-contract.md) for validation, configurable limits,
 deadlines, and error responses.
@@ -123,6 +127,19 @@ Input is validated before requests or output-file creation. Output files are ove
 Errors go to stderr and stop execution with a nonzero status; earlier complete records
 remain available. There are no automatic retries. A failed CLI request may still have
 created a payload on the server.
+
+## Architecture overview
+
+```mermaid
+flowchart LR
+    client["CLI / HTTP client"] -->|"Create or retrieve payload"| api["FastAPI service"]
+    api <-->|"SQLAlchemy async access"| db[("PostgreSQL: complete payloads and cached string transformations")]
+```
+
+The service reuses stored payloads and string transformations, uppercases missing
+strings, and publishes the complete interleaved output. PostgreSQL preserves both
+payloads and cached transformations across application restarts.
+See the [architecture guide](docs/architecture.md) for identity, transactions, and coordination.
 
 ## Design decisions
 

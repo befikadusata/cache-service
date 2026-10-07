@@ -35,6 +35,8 @@ See the [README design decisions](../README.md#design-decisions) for rationale. 
   Retain legacy routes and input names with identical cache identity.
 - Preserve string content, whitespace, case, duplicates, and ordering in input identity.
 - Reject unequal lengths and non-string items without coercing them silently.
+- Reject NUL and lone surrogate code points before database access in API and CLI input;
+  preserve other Unicode scalar values without normalization.
 - Accept two empty lists and produce an empty output unless clarification specifies otherwise.
 - Provide `cache-cli` with `-r`, `-i`, `-j`, and `-o` plus their long options.
   Reserve the conflicting short option -h for help; use --host for the server address.

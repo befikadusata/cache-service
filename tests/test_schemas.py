@@ -44,6 +44,22 @@ def test_rejects_invalid_input(data):
         PayloadCreate.model_validate(data)
 
 
+@pytest.mark.parametrize("source", ["\x00", "before\x00after", "\ud800", "\udfff"])
+@pytest.mark.parametrize("field", ["list_1", "list_2"])
+def test_rejects_strings_postgresql_cannot_store(source, field):
+    data = {"list_1": ["valid"], "list_2": ["valid"]}
+    data[field] = [source]
+    with pytest.raises(ValidationError, match="NUL or lone surrogate"):
+        PayloadCreate.model_validate(data)
+
+
+def test_accepts_unicode_scalar_values_without_normalization():
+    sources = ["😀", "é", "e\u0301", "\ud7ff", "\ue000"]
+    request = PayloadCreate(list1=sources, list2=sources)
+    assert request.list1 == sources
+    assert request.list2 == sources
+
+
 def test_configured_limits_include_both_lists_and_accept_boundary():
     settings = Settings(_env_file=None,
         database_url="postgresql+asyncpg://test:test@localhost/test",

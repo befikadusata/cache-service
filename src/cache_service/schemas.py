@@ -37,6 +37,8 @@ class PayloadCreate(BaseModel):
         total = 0
         for values in (self.list1, self.list2):
             for value in values:
+                if "\x00" in value or any("\ud800" <= char <= "\udfff" for char in value):
+                    raise ValueError("Strings must not contain NUL or lone surrogate code points")
                 if len(value) > settings.max_string_characters:
                     raise ValueError("String character limit exceeded")
                 total += len(value)

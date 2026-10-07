@@ -70,7 +70,11 @@ def test_input_sources_and_file_output(source, tmp_path, monkeypatch, mock_http,
 
 
 @pytest.mark.parametrize(
-    "raw", ["not JSON", "{}", '{"list1":[1],"list2":[2]}', '{"list1":[],"list2":["x"]}']
+    "raw", [
+        "not JSON", "{}", '{"list1":[1],"list2":[2]}', '{"list1":[],"list2":["x"]}',
+        r'{"list_1":["\u0000"],"list_2":["valid"]}',
+        r'{"list_1":["valid"],"list_2":["\ud800"]}',
+    ]
 )
 def test_invalid_input_preserves_existing_destination(raw, tmp_path, capsys):
     output_path = tmp_path / "output.jsonl"
