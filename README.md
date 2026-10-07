@@ -5,7 +5,7 @@ and stores the generated payloads in PostgreSQL. Successful string transformatio
 are cached across requests and application restarts. A CLI creates and retrieves
 payloads through the API.
 
-For example, `{"list1":["hello","world"],"list2":["one","two"]}` produces
+For example, `{"list_1":["hello","world"],"list_2":["one","two"]}` produces
 `HELLO, ONE, WORLD, TWO`. Submitting the same ordered input again returns the same
 payload identifier.
 
@@ -41,9 +41,9 @@ For existing configuration, update `DB_PORT` in `.env` before starting Compose.
 Create a payload:
 
 ```sh
-curl -sS http://localhost:8000/payloads \
+curl -sS http://localhost:8000/payload \
   -H 'Content-Type: application/json' \
-  -d '{"list1":["hello","world"],"list2":["one","two"]}'
+  -d '{"list_1":["hello","world"],"list_2":["one","two"]}'
 ```
 
 The response contains its identifier:
@@ -56,12 +56,16 @@ Retrieve the output using the identifier returned by your request:
 
 ```sh
 PAYLOAD_ID='replace-with-the-id-returned-above'
-curl -sS "http://localhost:8000/payloads/$PAYLOAD_ID"
+curl -sS "http://localhost:8000/payload/$PAYLOAD_ID"
 ```
 
 ```json
 {"output":"HELLO, ONE, WORLD, TWO"}
 ```
+
+The earlier `/payloads` routes and `list1`/`list2` input names remain supported.
+Both input spellings reuse the same payload identifier; supplying both spellings for
+one list is rejected. OpenAPI documents the assessment names.
 
 Both lists must contain strings and have equal lengths. Empty lists produce an empty
 output. Creation and reuse return HTTP 200; invalid input returns 422, and an unknown
@@ -77,7 +81,7 @@ Requires Python 3.12–3.14 and uv. With the API running, install the locked dep
 
 ```sh
 uv sync --locked
-uv run cache-service --json '{"list1":["hello","world"],"list2":["one","two"]}' --repeat 2
+uv run cache-cli --json '{"list_1":["hello","world"],"list_2":["one","two"]}' --repeat 2
 ```
 
 Each repeat sends one create request followed by one read request, then writes a
@@ -91,21 +95,28 @@ still emits a record:
 | Option | Description | Default |
 | --- | --- | --- |
 | `--host` | HTTP/HTTPS service base URL | `http://127.0.0.1:8000` |
-| `--repeat` | Positive number of create/read iterations | `1` |
-| `--json` | Inline input JSON; exclusive with `--input` | Required unless `--input` is set |
-| `--input` | UTF-8 JSON file, or `-` for stdin | Required unless `--json` is set |
-| `--output` | JSON Lines output file, or `-` for stdout | `-` |
+| `-r`, `--repeat` | Positive number of create/read iterations | `1` |
+| `-j`, `--json` | Inline input JSON; exclusive with `--input` | Required unless `--input` is set |
+| `-i`, `--input` | UTF-8 JSON file, or `-` for stdin | Required unless `--json` is set |
+| `-o`, `--output` | JSON Lines output file, or `-` for stdout | `-` |
 | `-h`, `--help` | Show usage | — |
 
 Save the example input as `payload.json` to use a file or stdin:
 
 ```sh
-uv run cache-service --input payload.json --output results.jsonl
-uv run cache-service --input - --host http://127.0.0.1:8000 < payload.json
-uv run cache-service --help
+uv run cache-cli --input payload.json --output results.jsonl
+uv run cache-cli --input - --host http://127.0.0.1:8000 < payload.json
+uv run cache-cli --help
 ```
 
+The earlier `cache-service` command remains an alias. The task assigns `-h` to both
+host and help; this CLI reserves it for help and uses `--host` for the server.
+
 CLI options come from arguments; environment variables and `.env` do not supply them.
+CLI input validation always uses the default limits: 100 items per list, 10,000
+characters per string, and 100,000 characters across both lists. Changing server
+limits does not change CLI limits; input accepted by a server with higher limits
+may still be rejected by the CLI.
 Input is validated before requests or output-file creation. Output files are overwritten.
 Errors go to stderr and stop execution with a nonzero status; earlier complete records
 remain available. There are no automatic retries. A failed CLI request may still have
@@ -131,7 +142,7 @@ Requires Python 3.12–3.14, uv, and PostgreSQL. To run the API locally with the
 
 ```sh
 python3 scripts/configure_local.py  # first setup only
-docker compose up -d database
+docker compose up -d --wait database
 uv sync --locked
 uv run alembic upgrade head
 uv run uvicorn cache_service.main:create_app --factory

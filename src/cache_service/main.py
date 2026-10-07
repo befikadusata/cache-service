@@ -78,7 +78,8 @@ def create_app(
     ):
         app.add_exception_handler(error_type, operational_error)
 
-    @app.post("/payloads", response_model=PayloadCreated)
+    @app.post("/payload", response_model=PayloadCreated)
+    @app.post("/payloads", response_model=PayloadCreated, include_in_schema=False)
     async def post_payload(
         payload: Annotated[PayloadCreate, Depends(validate_payload)],
     ) -> PayloadCreated:
@@ -86,7 +87,8 @@ def create_app(
             identifier = await create_payload(engine, payload, transformer, transformer_version)
         return PayloadCreated(id=identifier)
 
-    @app.get("/payloads/{id}", response_model=PayloadOutput)
+    @app.get("/payload/{id}", response_model=PayloadOutput)
+    @app.get("/payloads/{id}", response_model=PayloadOutput, include_in_schema=False)
     async def get_payload(id: UUID) -> PayloadOutput:
         async with asyncio.timeout(configuration.read_timeout_seconds):
             output = await read_payload(engine, id)

@@ -22,7 +22,8 @@ class CliSettings(BaseSettings):
     """Create and read payloads, emitting one JSON Lines record per successful repeat."""
 
     model_config = SettingsConfigDict(
-        cli_prog_name="cache-service",
+        cli_prog_name="cache-cli",
+        cli_shortcuts={"repeat": "r", "input": "i", "json": "j", "output": "o"},
         cli_exit_on_error=False,
         cli_avoid_json=True,
         hide_input_in_errors=True,
@@ -115,14 +116,14 @@ def execute_requests(
     """Emit a result only after both requests for that iteration succeed."""
     base = str(settings.host).rstrip("/")
     for _ in range(settings.repeat):
-        response = client.post(f"{base}/payloads", json=payload.model_dump())
+        response = client.post(f"{base}/payload", json=payload.model_dump(by_alias=True))
         if response.status_code != 200:
             raise CliError(f"Create request failed (HTTP {response.status_code})")
         try:
             created = PayloadCreated.model_validate_json(response.content, strict=True)
         except ValidationError as exc:
             raise CliError("Invalid create response") from exc
-        response = client.get(f"{base}/payloads/{created.id}")
+        response = client.get(f"{base}/payload/{created.id}")
         if response.status_code != 200:
             raise CliError(f"Read request failed (HTTP {response.status_code})")
         try:

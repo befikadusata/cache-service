@@ -77,7 +77,8 @@ interrupts and preserving earlier records after later failure. HTTP unit tests u
 MockTransport; they do not establish network or database behavior.
 
 `tests/test_cli_integration.py` starts the current application through Uvicorn on a reserved
-loopback socket and runs the installed `cache-service` executable in separate subprocesses.
+loopback socket and runs the installed `cache-cli` and compatibility `cache-service`
+executables in separate subprocesses.
 It uses the migrated PostgreSQL database specified by `TEST_DATABASE_URL`. Inline JSON,
 UTF-8 files, stdin, stdout and output files produce identical results and reuse the stored
 ID across CLI processes. Newline/Unicode output survives JSON Lines encoding. Instrumented
@@ -97,6 +98,28 @@ uv run pytest tests/test_cli_integration.py -q
 The normal integration suite and CI include these tests. This verifies current source over
 real HTTP and PostgreSQL; the [Docker deployment check](#docker-deployment) verifies
 packaged startup and restart persistence separately.
+
+## Assessment compatibility verification
+
+On 2026-10-07, the assessment paths and field names were added with compatibility for
+existing callers. `test_assessment_sample_routes_fields_and_cli` exercises the exact
+sample through `POST /payload` and `GET /payload/{id}` against live HTTP and PostgreSQL.
+It checks the expected interleaved output, legacy route/input reuse of the same UUID,
+OpenAPI paths, and the installed `cache-cli` with `-j`, `-r`, `-i`, and `-o`.
+File and stdin inputs and file/stdout outputs reuse the stored result without extra
+transformer calls. Parser/schema tests also check strict validation and duplicate spellings.
+
+| Executed check | Result |
+| --- | --- |
+| `uv sync --locked --offline` using the existing cache outside the sandbox | Passed; both CLI entry points installed; lockfile unchanged |
+| Full `.venv/bin/pytest -q --tb=short` with securely supplied `TEST_DATABASE_URL` | 211 passed in 30.80 seconds; one upstream TestClient deprecation warning |
+| `.venv/bin/ruff check .` and `git diff --check` | Passed |
+| `.venv/bin/cache-cli --help` | Passed; short options displayed; `-h` remains help |
+
+The initial offline sync with an empty temporary cache could not find Hatchling; retry
+using the existing cache succeeded. No migration was needed because internal identity
+encoding and stored records are unchanged. Docker build/deployment was not repeated in
+this follow-up; the earlier deployment evidence remains historical.
 
 ## Docker deployment
 

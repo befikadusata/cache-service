@@ -25,7 +25,7 @@ def mock_http(monkeypatch):
 
 def success(request):
     if request.method == "POST":
-        assert json.loads(request.content) == json.loads(PAYLOAD)
+        assert json.loads(request.content) == {"list_1": ["hello"], "list_2": ["world"]}
         return httpx.Response(200, json={"id": IDENTIFIER})
     return httpx.Response(200, json={"output": "HELLO, WORLD\nß"})
 
@@ -44,7 +44,7 @@ def test_repeats_preserve_host_prefix_and_flush_records(mock_http, monkeypatch, 
     captured = capsys.readouterr()
     assert captured.err == ""
     assert json.loads(captured.out) == {"id": IDENTIFIER, "output": "HELLO, WORLD\nß"}
-    assert calls == [("POST", "/api/payloads"), ("GET", f"/api/payloads/{IDENTIFIER}")] * 2
+    assert calls == [("POST", "/api/payload"), ("GET", f"/api/payload/{IDENTIFIER}")] * 2
 
 
 @pytest.mark.parametrize("source", ["file", "stdin", "inline"])
@@ -150,7 +150,7 @@ def test_help_exits_successfully(capsys):
 def test_empty_payload_and_output(mock_http, capsys):
     def handler(request):
         if request.method == "POST":
-            assert json.loads(request.content) == {"list1": [], "list2": []}
+            assert json.loads(request.content) == {"list_1": [], "list_2": []}
             return httpx.Response(200, json={"id": IDENTIFIER})
         return httpx.Response(200, json={"output": ""})
 

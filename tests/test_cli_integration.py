@@ -71,8 +71,8 @@ async def live_cli_service():
                 await engine.dispose()
 
 
-async def invoke_cli(*args, stdin=None):
-    executable = Path(sys.executable).parent / "cache-service"
+async def invoke_cli(*args, stdin=None, command="cache-service"):
+    executable = Path(sys.executable).parent / command
     assert executable.is_file(), "Install the project with uv sync before running CLI integration"
     # The client should work without API/database settings or credentials.
     environment = {
@@ -99,6 +99,57 @@ async def invoke_cli(*args, stdin=None):
         await process.communicate()
         raise
     return process.returncode, stdout.decode("utf-8"), stderr.decode("utf-8")
+
+
+@pytest.mark.integration
+async def test_assessment_sample_routes_fields_and_cli(live_cli_service, tmp_path):
+    host, calls, _, _ = live_cli_service
+    payload = {
+        "list_1": ["first string", "second string", "third string"],
+        "list_2": ["other string", "another string", "last string"],
+    }
+    expected = (
+        "FIRST STRING, OTHER STRING, SECOND STRING, ANOTHER STRING, THIRD STRING, LAST STRING"
+    )
+    async with httpx.AsyncClient(base_url=host) as client:
+        response = await client.post("/payload", json=payload)
+        assert response.status_code == 200
+        identifier = response.json()["id"]
+        UUID(identifier)
+        legacy = {"list1": payload["list_1"], "list2": payload["list_2"]}
+        assert (await client.post("/payloads", json=legacy)).json() == {"id": identifier}
+        for path in ("/payload", "/payloads"):
+            response = await client.get(f"{path}/{identifier}")
+            assert response.status_code == 200
+            assert response.json() == {"output": expected}
+        schema = (await client.get("/openapi.json")).json()
+        assert "/payload" in schema["paths"]
+        assert "/payload/{id}" in schema["paths"]
+        assert "/payloads" not in schema["paths"]
+
+    record = {"id": identifier, "output": expected}
+    raw = json.dumps(payload)
+    code, stdout, stderr = await invoke_cli(
+        "--host", host, "-j", raw, "-r", "2", command="cache-cli"
+    )
+    assert (code, stderr) == (0, "")
+    assert [json.loads(line) for line in stdout.splitlines()] == [record, record]
+
+    input_file = tmp_path / "payload.json"
+    input_file.write_text(raw, encoding="utf-8")
+    output_file = tmp_path / "output.jsonl"
+    code, stdout, stderr = await invoke_cli(
+        "--host", host, "-i", str(input_file), "-o", str(output_file), command="cache-cli"
+    )
+    assert (code, stdout, stderr) == (0, "", "")
+    assert json.loads(output_file.read_text(encoding="utf-8")) == record
+
+    code, stdout, stderr = await invoke_cli(
+        "--host", host, "-i", "-", "-o", "-", stdin=raw, command="cache-cli"
+    )
+    assert (code, stderr) == (0, "")
+    assert json.loads(stdout) == record
+    assert calls == [*payload["list_1"], *payload["list_2"]]
 
 
 @pytest.mark.integration

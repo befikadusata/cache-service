@@ -13,6 +13,25 @@ def test_preserves_exact_input_and_accepts_empty_lists():
     assert PayloadCreate(list1=[], list2=[]).list1 == []
 
 
+def test_assessment_fields_preserve_internal_identity_and_wire_names():
+    data = {"list_1": [" a ", ""], "list_2": ["a", "é"]}
+    request = PayloadCreate.model_validate(data)
+    assert request == PayloadCreate(list1=data["list_1"], list2=data["list_2"])
+    assert request.model_dump(by_alias=True) == data
+    assert set(PayloadCreate.model_json_schema()["properties"]) == {"list_1", "list_2"}
+
+
+@pytest.mark.parametrize("data", [
+    {"list_1": [], "list_2": ["a"]},
+    {"list_1": [1], "list_2": ["a"]},
+    {"list_1": [], "list1": [], "list_2": []},
+    {"list_1": [], "list_2": [], "list2": []},
+])
+def test_assessment_fields_reject_invalid_or_duplicate_inputs(data):
+    with pytest.raises(ValidationError):
+        PayloadCreate.model_validate(data)
+
+
 @pytest.mark.parametrize("data", [
     {}, {"list1": [], "list2": ["a"]},
     {"list1": [1], "list2": ["a"]}, {"list1": [None], "list2": ["a"]},

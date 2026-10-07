@@ -79,6 +79,7 @@ Dependencies identify the required predecessor, rather than requiring every earl
 | B23 | Track actual time from available records; candidate reconciles previous work; report honest total without estimating missing history as fact | Ready | Ongoing | No authoritative total yet; candidate confirmation required |
 | B24 | Publish final repository revision and video, verify both links, draft reply with actual hours, submit when explicitly authorized | Waiting | B20–B23 | Neutral public repository exists; published main is B17 (`425e0b3`), with B18–B20 local at the B21 audit; final revision publication, video and submission remain |
 | B25 | Minimal GitHub Actions CI: Python 3.12, locked uv install, Ruff, unit tests, PostgreSQL 17 health check and migrations, integration tests, Docker build; verify configuration and local commands, then observe an actual GitHub run | Done | B03; first push or pull request for hosted evidence | [Workflow](../.github/workflows/ci.yml), [commands](../README.md#continuous-integration); local checks and [hosted run](https://github.com/befikadusata/cache-service/actions/runs/37461411063) passed; personal notes updated; development commit titled `Add minimal GitHub Actions CI` |
+| B26 | Align assessment API paths, JSON fields, CLI command and short options; verify the exact sample and retain legacy identity reuse | Done | B20 | `main.py`, `schemas.py`, `cli.py`, packaged `cache-cli`, schema/parser/live-CLI tests and [compatibility verification](verification.md#assessment-compatibility-verification); 211 tests, Ruff, whitespace and locked offline install passed on 2026-10-07; commit titled `fix: add payload routes, JSON field aliases, and cache-cli options` |
 
 ## Current verification record
 
@@ -545,3 +546,22 @@ Documentation reconciliation on 2026-10-07:
   prior runtime evidence remains recorded under B13–B18, and B20 requires final suite execution.
 - Personal walkthrough notes updated outside Git. B20 is now ready; video and submission remain
   separate delivery work.
+
+
+## B26 assessment compatibility follow-up
+
+The first five submission gaps are resolved: assessment `/payload` routes, `list_1`/`list_2`
+fields, installed `cache-cli`, short options `-r`/`-i`/`-j`/`-o`, and exact-sample verification.
+Legacy routes, input names and `cache-service` remain supported. Internal canonical identity
+is unchanged, so both wire spellings return the same stored UUID. Supplying both spellings
+for a list is rejected. OpenAPI and public usage document the assessment names.
+
+Full PostgreSQL/live HTTP/subprocess verification passed: 211 tests in 30.80 seconds,
+with one upstream TestClient deprecation warning. Ruff, whitespace checks, CLI help and
+locked offline package installation passed; no lockfile or migration changes were required.
+See [verification](verification.md#assessment-compatibility-verification) for test mapping
+and the initial empty-cache installation failure resolved by the successful retry.
+No Docker rebuild or hosted CI rerun is claimed. Recorded in commit titled
+`fix: add payload routes, JSON field aliases, and cache-cli options`. B22–B24 recording, hours reconciliation and publication/submission remain pending.
+This adds compatibility at existing boundaries without a new architecture or request flow;
+existing personal explanations remain applicable.

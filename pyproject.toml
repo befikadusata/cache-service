@@ -14,6 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
+cache-cli = "cache_service.cli:main"
 cache-service = "cache_service.cli:main"
 
 [dependency-groups]

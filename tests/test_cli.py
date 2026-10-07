@@ -15,6 +15,19 @@ def test_inline_input_defaults():
     assert settings.output_file == "-"
 
 
+@pytest.mark.parametrize("source_flag,source", [("-j", "{}"), ("-i", "-")])
+def test_short_options(source_flag, source):
+    settings = parse_cli_args([source_flag, source, "-r", "2", "-o", "results.jsonl"])
+    assert settings.repeat == 2
+    assert settings.output_file == "results.jsonl"
+    assert (settings.inline_json if source_flag == "-j" else settings.input_file) == source
+
+
+def test_short_options_preserve_input_exclusivity():
+    with pytest.raises(ValidationError, match="exactly one"):
+        parse_cli_args(["-j", "{}", "-i", "-"])
+
+
 @pytest.mark.parametrize("source", ["payload.json", "-", "folder with spaces/input.json"])
 def test_file_source_and_explicit_options(source):
     settings = parse_cli_args(

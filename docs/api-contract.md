@@ -4,7 +4,10 @@ Payload routes enforce configured input validation and overall POST/GET deadline
 Per-string caching, bounded coordination, and protected cleanup are implemented.
 See [guarantee evidence](verification.md#guarantee-evidence) for supporting tests and scope.
 
-`POST /payloads` accepts a JSON object containing exactly `list1` and `list2`.
+`POST /payload` accepts a JSON object containing exactly `list_1` and `list_2`.
+The legacy `/payloads` routes and `list1`/`list2` fields remain accepted. Either
+spelling maps to the same internal identity and stored UUID. Supplying both spellings
+for one list is rejected as extra input. OpenAPI presents only the assessment names.
 Both must be arrays of strings of equal length. Missing fields, extra fields,
 non-string elements, nulls, unequal lengths and exceeded limits return 422 using
 FastAPI's validation error envelope (`detail` is a list). No coercion is allowed.
@@ -15,7 +18,7 @@ Successful creation and reuse both return 200 with `{"id": "<uuid>"}`.
 Using one status lets the CLI treat retries identically. The identifier is a generated
 UUID, separate from the input digest. B05 defines canonical identity.
 
-`GET /payloads/{id}` accepts a UUID and returns 200 with `{"output": "..."}`.
+`GET /payload/{id}` accepts a UUID and returns 200 with `{"output": "..."}`.
 Output alternates transformed list1 and list2 elements, joined by comma and space.
 Malformed UUIDs return 422; a syntactically valid unknown UUID returns 404 with
 `{"detail": "Payload not found"}`. Existing payloads remain readable after a

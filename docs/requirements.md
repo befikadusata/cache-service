@@ -31,10 +31,14 @@ See the [README assumptions](../README.md#assessment-assumptions) for rationale.
 
 ## Input and CLI policy
 
+- Match `/payload`, `/payload/{id}`, and `list_1`/`list_2` from the assessment.
+  Retain legacy routes and input names with identical cache identity.
 - Preserve string content, whitespace, case, duplicates, and ordering in input identity.
 - Reject unequal lengths and non-string items without coercing them silently.
 - Accept two empty lists and produce an empty output unless clarification specifies otherwise.
-- Reserve the conflicting short option -h for help; use --host for the server address.
+- Provide `cache-cli` with `-r`, `-i`, `-j`, and `-o` plus their long options.
+  Reserve the conflicting short option -h for help; use --host for the server address.
+  Keep `cache-service` as a compatibility command.
 - Require exactly one input source: inline JSON or file input, with stdin represented by a dash.
 - Require a positive repeat count. Each iteration creates or reuses a payload and reads its output.
 - Default output to stdout and send diagnostics to stderr. Use JSON Lines for stdout and files:
