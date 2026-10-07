@@ -27,7 +27,7 @@ The task author responded that both payload identity and storage are our call an
 | Payload files | Complete generated payloads stored in PostgreSQL, without filesystem files | Storage model, atomic publication and deployment |
 | Transformer | Deterministic uppercase conversion following the sample | Implementation assumption, not a separately confirmed contract |
 
-See the [README assumptions](../README.md#assessment-assumptions) for rationale. Revisit these choices if new instructions change the contract.
+See the [README design decisions](../README.md#design-decisions) for rationale. Revisit these choices if new instructions change the contract.
 
 ## Input and CLI policy
 

@@ -1,9 +1,9 @@
-# Persistent caching service
+# Persistent Payload Caching Service
 
-A FastAPI service that uppercases two lists of strings, interleaves their results,
-and stores the generated payloads in PostgreSQL. Successful string transformations
-are cached across requests and application restarts. A CLI creates and retrieves
-payloads through the API.
+A FastAPI service that uppercases two equal-length lists of strings, interleaves
+their results, and stores the generated payloads in PostgreSQL using SQLAlchemy.
+Successful string transformations are cached across requests and application
+restarts. A CLI creates and retrieves payloads through the API.
 
 For example, `{"list_1":["hello","world"],"list_2":["one","two"]}` produces
 `HELLO, ONE, WORLD, TWO`. Submitting the same ordered input again returns the same
@@ -65,7 +65,7 @@ curl -sS "http://localhost:8000/payload/$PAYLOAD_ID"
 
 The earlier `/payloads` routes and `list1`/`list2` input names remain supported.
 Both input spellings reuse the same payload identifier; supplying both spellings for
-one list is rejected. OpenAPI documents the assessment names.
+one list is rejected. OpenAPI documents `/payload` and the `list_1`/`list_2` fields.
 
 Both lists must contain strings and have equal lengths. Empty lists produce an empty
 output. Creation and reuse return HTTP 200; invalid input returns 422, and an unknown
@@ -76,6 +76,8 @@ See the [API contract](docs/api-contract.md) for validation, configurable limits
 deadlines, and error responses.
 
 ## CLI usage
+
+The CLI uses Pydantic Settings to parse and validate command-line arguments.
 
 Requires Python 3.12–3.14 and uv. With the API running, install the locked dependencies:
 
@@ -122,7 +124,7 @@ Errors go to stderr and stop execution with a nonzero status; earlier complete r
 remain available. There are no automatic retries. A failed CLI request may still have
 created a payload on the server.
 
-## Assessment assumptions
+## Design decisions
 
 The implementation makes the following assumptions where the assessment leaves behavior open:
 
