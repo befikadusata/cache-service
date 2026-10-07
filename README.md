@@ -188,25 +188,18 @@ uv run ruff check .
 uv run pytest -m 'not integration'
 ```
 
-Integration tests require a migrated PostgreSQL database. To use the database configured
-by your local application settings without printing its credentials:
+Integration tests require a running, migrated PostgreSQL database. Set `TEST_DATABASE_URL`
+in your local `.env` to the test database's `postgresql+asyncpg` connection URL, then run:
 
 ```sh
-uv run alembic upgrade head
-uv run python - <<'PYTHON'
-import os
-import subprocess
-import sys
-
-from cache_service.config import Settings
-
-os.environ["TEST_DATABASE_URL"] = Settings().database_url.get_secret_value()
-raise SystemExit(subprocess.call([sys.executable, "-m", "pytest", "-m", "integration"]))
-PYTHON
+make test-integration
 ```
 
-If `TEST_DATABASE_URL` is already exported, run `make test-integration` instead.
-Integration tests skip when that variable is absent. Tests cover persistence, cache reuse,
+Tests load this setting automatically from `.env`; an exported value takes precedence.
+They do not fall back to the application database. Before the first run, create the test
+database and apply `uv run alembic upgrade head` with `DATABASE_URL` pointing to that
+database (Alembic uses application settings, not `TEST_DATABASE_URL`).
+Integration tests skip when `TEST_DATABASE_URL` is missing or empty. Tests cover persistence, cache reuse,
 concurrent requests, failure recovery, and the CLI against a live API.
 The [verification guide](docs/verification.md) maps guarantees to tests and documents
 an isolated Docker deployment check.

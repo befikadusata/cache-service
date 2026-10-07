@@ -16,7 +16,7 @@ Run commands from the repository root:
 - `uv run uvicorn cache_service.main:create_app --factory`: run the API locally with PostgreSQL available.
 - `make lint`: run Ruff checks.
 - `make test`: run tests that do not require PostgreSQL.
-- `make test-integration`: run database tests with exported `TEST_DATABASE_URL` pointing to a migrated database.
+- `make test-integration`: run database tests with `TEST_DATABASE_URL` in `.env` or the process environment pointing to a migrated database.
 
 ## Coding Style & Naming Conventions
 

@@ -34,7 +34,8 @@ Verify externally observable behavior and cache guarantees. Unit tests isolate t
 
 These references map current documentation to implemented checks. Recorded execution outcomes
 are in the [backlog](backlog.md); this mapping does not claim a new full-suite run. PostgreSQL
-checks require a migrated database and `TEST_DATABASE_URL`; they skip when it is absent.
+checks require a migrated database and `TEST_DATABASE_URL` in `.env` or the process
+environment (exported values take precedence); they skip when it is missing or empty.
 
 | Documented behavior | Supporting checks | Scope and limits |
 | --- | --- | --- |
@@ -93,7 +94,7 @@ After `uv sync --locked` and migration, run:
 
 ```sh
 uv run pytest tests/test_cli.py tests/test_cli_execution.py -q
-# Export TEST_DATABASE_URL securely; do not print its value.
+# Set TEST_DATABASE_URL in .env or the environment; do not print its value.
 uv run pytest tests/test_cli_integration.py -q
 ```
 

@@ -7,7 +7,7 @@ help:
 	@echo "down              Stop containers (preserves database storage)"
 	@echo "logs              Follow container logs"
 	@echo "test              Run local tests without PostgreSQL"
-	@echo "test-integration  Run database tests (requires TEST_DATABASE_URL)"
+	@echo "test-integration  Run database tests (TEST_DATABASE_URL in .env or environment)"
 	@echo "lint              Check Python code with Ruff"
 	@echo "migrate           Apply migrations using Compose"
 
@@ -24,7 +24,6 @@ test:
 	uv run pytest -m 'not integration'
 
 test-integration:
-	@test -n "$$TEST_DATABASE_URL" || { echo "Set TEST_DATABASE_URL to a migrated PostgreSQL database" >&2; exit 1; }
 	uv run pytest -m integration
 
 lint:

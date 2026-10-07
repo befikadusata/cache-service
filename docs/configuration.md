@@ -15,6 +15,13 @@ arguments and does not inherit application options from environment or `.env`.
 | DB_NAME | `cache` | Nonempty database name |
 | DB_PASS | None | Required and nonempty unless DATABASE_URL is provided |
 | DATABASE_URL | Empty | Optional full `postgresql+asyncpg` URL; overrides connection fields |
+| TEST_DATABASE_URL | Empty | Integration tests only; full URL to a running, migrated PostgreSQL test database |
+
+Pytest loads `TEST_DATABASE_URL` from the process environment or `.env`, with the process
+environment taking precedence. Run `make test-integration` after configuring it; no terminal
+script is required. Missing or empty values skip database tests, and application database
+settings are never used as a fallback. Alembic still uses `DATABASE_URL` or `DB_*` settings;
+point its `DATABASE_URL` at the test database when applying test database migrations.
 
 `python3 scripts/configure_local.py` creates `.env` with a random password and mode 0600,
 without printing credentials or overwriting existing configuration. For a different host port,
