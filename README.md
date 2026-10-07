@@ -1,14 +1,40 @@
 # Persistent caching service
 
-A FastAPI service that transforms two lists of strings, interleaves their results, and persists reusable transformations and generated payloads. A CLI exercises the API.
+A FastAPI service that uppercases two lists of strings, interleaves their results,
+and stores the generated payloads in PostgreSQL. Successful string transformations
+are cached across requests and application restarts. A CLI creates and retrieves
+payloads through the API.
 
-## Project status
+For example, `{"list1":["hello","world"],"list2":["one","two"]}` produces
+`HELLO, ONE, WORLD, TWO`. Submitting the same ordered input again returns the same
+payload identifier.
 
-Payload endpoints, persistent transformation caching, bounded PostgreSQL coordination, and
-the CLI are implemented. Failure recovery, separate-process contention, live CLI requests,
-and Docker restart persistence have recorded verification evidence. The
-[final implementation review](docs/final-review.md) and full required suite pass; delivery
-remains tracked in the [backlog](docs/backlog.md).
+## Quick start
+
+Requires Python 3 to generate local credentials and Docker with the Compose plugin.
+Run commands from the repository root:
+
+```sh
+python3 scripts/configure_local.py
+docker compose up --build -d
+```
+
+Run the setup script once. It creates an ignored `.env` file with a random database
+password and preserves any existing configuration. Compose starts PostgreSQL,
+applies Alembic migrations, then starts the API.
+
+- [Interactive API documentation](http://localhost:8000/docs)
+- [Liveness check](http://localhost:8000/health/live): application responsiveness
+- [Readiness check](http://localhost:8000/health/ready): database connectivity and required tables
+
+Follow logs with `docker compose logs --follow`. Stop with `docker compose down`;
+the named database volume preserves committed payloads and cached transformations.
+Removing that volume deletes the stored data. Published API and database ports bind
+to localhost.
+
+If database port 5432 is occupied, use
+`python3 scripts/configure_local.py --database-port 55432` during first setup.
+For existing configuration, update `DB_PORT` in `.env` before starting Compose.
 
 ## Payload API
 
@@ -20,214 +46,170 @@ curl -sS http://localhost:8000/payloads \
   -d '{"list1":["hello","world"],"list2":["one","two"]}'
 ```
 
-The response is `{"id":"<uuid>"}`. Read it with
-`curl -sS http://localhost:8000/payloads/<uuid>` to obtain
-`{"output":"HELLO, ONE, WORLD, TWO"}`. Repeating identical ordered input under the same
-transformer version returns the stored identifier, including after application restart.
-Concurrent publication also returns the stored winner's identifier. Session advisory locks
-coordinate missing transformations across cooperating database sessions.
+The response contains its identifier:
 
-Both lists must contain strings and have equal lengths. Two empty lists produce an empty
-output. Unknown UUIDs return 404, and invalid input returns 422. Configurable input limits,
-deadlines, and error responses are described in the [API contract](docs/api-contract.md).
-Only complete outputs are published. Successful individual transformations are cached under
-their exact source and transformer version, including after restart. Strings shared by different
-payloads reuse those results, and duplicates within a request are transformed once. Successful
-results survive a later transformer failure so retries only transform remaining misses. Cache
-reads are batched; conflicting inserts use verified authoritative readback. Each missing string
-holds one session advisory lock, rechecks the cache after acquisition, and commits on that same
-connection before unlock. No transaction spans transformation. Admission and lock waits are
-bounded, and cleanup is protected against cancellation. Controlled separate-process tests
-verify shared work for identical and overlapping requests. Crashes or connection loss can
-still cause repeated external calls; see [guarantees and evidence](docs/verification.md#guarantee-evidence).
+```json
+{"id":"550e8400-e29b-41d4-a716-446655440000"}
+```
 
-## Assessment assumptions
+Retrieve the output using the identifier returned by your request:
 
-The task author delegated the payload identity and storage choices to us and asked that assumptions be documented here.
+```sh
+PAYLOAD_ID='replace-with-the-id-returned-above'
+curl -sS "http://localhost:8000/payloads/$PAYLOAD_ID"
+```
 
-- **Payload identity:** identical ordered input lists under the same transformer version reuse the same identifier. Case, whitespace, list boundaries, duplicates and order are preserved. Different inputs may produce the same uppercase output and still receive different identifiers. This treats creation as a repeatable operation on a request without conflating distinct requests.
-- **Payload storage:** complete generated payloads are stored in PostgreSQL and retrieved by identifier. No filesystem payload files are created. Keeping payloads and reusable transformations in one durable database simplifies atomic publication and multi-worker access.
-- **Transformer:** deterministic uppercase conversion follows the sample. This remains our implementation assumption rather than an explicitly confirmed transformation contract.
+```json
+{"output":"HELLO, ONE, WORLD, TWO"}
+```
+
+Both lists must contain strings and have equal lengths. Empty lists produce an empty
+output. Creation and reuse return HTTP 200; invalid input returns 422, and an unknown
+UUID returns 404. By default, each list allows 100 items, each string allows 10,000
+characters, and both lists together allow 100,000 characters.
+
+See the [API contract](docs/api-contract.md) for validation, configurable limits,
+deadlines, and error responses.
 
 ## CLI usage
 
-The `cache-service` executable implements argument parsing, HTTP requests and file I/O
-(B15–B16). The parser uses Pydantic Settings, independently
-of API/database settings. Environment variables and `.env` do not supply CLI options.
-
-| Option | Policy |
-| --- | --- |
-| `--host` | HTTP/HTTPS base URL; default `http://127.0.0.1:8000` |
-| `--repeat` | Positive integer; default `1` |
-| `--input` | JSON file path, or `-` for stdin |
-| `--json` | Inline JSON; exactly one of this and `--input` is required |
-| `--output` | JSON Lines file path; default `-` for stdout |
-| `-h`, `--help` | Show help and exit successfully without requiring input |
-
-Empty source/destination strings, invalid URLs, nonpositive repeat counts, unknown flags
-and missing flag values are rejected. Input is read once as UTF-8 JSON and validated before
-opening output or making requests. Local validation uses the default API input limits;
-the server additionally enforces its configured limits.
+Requires Python 3.12–3.14 and uv. With the API running, install the locked dependencies:
 
 ```sh
-uv run cache-service --json '{"list1":["hello"],"list2":["world"]}' --repeat 2
-uv run cache-service --input payload.json --output results.jsonl
-cat payload.json | uv run cache-service --input - --host http://127.0.0.1:8000
-uv run cache-service --help
+uv sync --locked
+uv run cache-service --json '{"list1":["hello","world"],"list2":["one","two"]}' --repeat 2
 ```
 
-An output file is opened in overwrite mode after input validation. Read input into memory
-first, so using the same input and output path is supported, but replaces the input file.
-The CLI preserves a path prefix in the service base URL. Each repeat makes one POST followed
-by one GET, using one HTTP client. HTTP timeouts are 5 seconds for connection and pool waits,
-10 seconds for writes, and 75 seconds for reads, accommodating the server's default generation
-and cleanup budgets. Read timeouts bound inactivity, not total request duration. Servers with
-larger deadlines may outlast the CLI's read timeout. There are no automatic retries.
-
-Each successful repeat creates or reuses a payload, reads it, and writes one compact JSON
-object containing `id` and `output`, followed by a newline. This JSON Lines format applies
-to both stdout (the default) and output files, including a single repeat:
+Each repeat sends one create request followed by one read request, then writes a
+JSON Lines record to stdout. Identical requests reuse the ID; each successful repeat
+still emits a record:
 
 ```json
 {"id":"550e8400-e29b-41d4-a716-446655440000","output":"HELLO, ONE, WORLD, TWO"}
 ```
 
-JSON encoding escapes embedded newlines in strings, so each result occupies one physical
-line. Repeated requests emit one record per successful iteration, even when the ID is reused.
-The CLI writes and flushes each record as the iteration finishes. Diagnostics go to stderr; a failed
-iteration stops the loop with a nonzero exit status and emits no result record for that
-iteration. Earlier complete records remain available. JSON Lines preserves the ID and exact
-output while allowing incremental consumption without buffering a single JSON array.
-Argument, input, file, network, HTTP-status and malformed-response errors exit with status 1;
-an interrupt exits with status 130. Diagnostics omit raw input, response bodies and credentials.
-If an output write fails, the final record may be incomplete; a server-side creation may already
-have committed even when the CLI reports failure. B17 verifies the installed executable
-against a live Uvicorn API and PostgreSQL; see [CLI evidence](docs/verification.md#cli-evidence).
+| Option | Description | Default |
+| --- | --- | --- |
+| `--host` | HTTP/HTTPS service base URL | `http://127.0.0.1:8000` |
+| `--repeat` | Positive number of create/read iterations | `1` |
+| `--json` | Inline input JSON; exclusive with `--input` | Required unless `--input` is set |
+| `--input` | UTF-8 JSON file, or `-` for stdin | Required unless `--json` is set |
+| `--output` | JSON Lines output file, or `-` for stdout | `-` |
+| `-h`, `--help` | Show usage | — |
 
-## Engineering documentation
-
-- [Implementation and submission backlog](docs/backlog.md)
-- [Requirements and acceptance criteria](docs/requirements.md)
-- [Payload API contract](docs/api-contract.md)
-- [Configuration reference](docs/configuration.md)
-- [Architecture decisions](docs/architecture.md)
-- [Implementation plan](docs/implementation-plan.md)
-- [Verification strategy](docs/verification.md)
-
-## Docker startup
-
-Requires Docker with the Compose plugin. From this directory, run:
+Save the example input as `payload.json` to use a file or stdin:
 
 ```sh
-python3 scripts/configure_local.py
-docker compose up --build
+uv run cache-service --input payload.json --output results.jsonl
+uv run cache-service --input - --host http://127.0.0.1:8000 < payload.json
+uv run cache-service --help
 ```
 
-Compose waits for PostgreSQL, runs migrations, then starts the API. Run the setup script once to generate local credentials in `.env`. `DB_USER`, `DB_NAME`, `DB_PASS`, `DB_HOST`, and `DB_PORT` configure local database access. Compose uses `DB_USER`, `DB_NAME`, and `DB_PASS` for the database and application containers; the application connects to `database:5432`, while `DB_PORT` selects the published host port. Both exposed ports bind to localhost; database storage persists in a named volume.
+CLI options come from arguments; environment variables and `.env` do not supply them.
+Input is validated before requests or output-file creation. Output files are overwritten.
+Errors go to stderr and stop execution with a nonzero status; earlier complete records
+remain available. There are no automatic retries. A failed CLI request may still have
+created a payload on the server.
 
-- `GET http://localhost:8000/health/live` checks application responsiveness.
-- `GET http://localhost:8000/health/ready` checks database connectivity and both initial tables; it returns 503 when unavailable.
-- Interactive API documentation is at `http://localhost:8000/docs`.
+## Assessment assumptions
 
-Stop with `docker compose down`. Removing the named volume deletes stored data.
+The implementation makes the following assumptions where the assessment leaves behavior open:
 
-The image starts one Uvicorn worker by default. To run two workers after Compose has
-completed migrations, use:
+- **Payload identity:** identical ordered input lists under the same transformer version
+  reuse one identifier. Case, whitespace, list boundaries, duplicates, and order matter.
+  Different inputs can produce the same output and still have different identifiers.
+- **Payload storage:** complete payloads and reusable transformations are stored in
+  PostgreSQL. Payloads are retrieved by identifier; no payload files are written.
+  A shared database supports durable storage and atomic publication across workers.
+- **Transformation:** deterministic Python Unicode uppercase conversion follows the
+  supplied example. This is an implementation assumption. A replacement transformer
+  must use a new version when its semantics change.
 
-```sh
-docker compose run --rm --service-ports api uvicorn cache_service.main:create_app \
-  --factory --host 0.0.0.0 --port 8000 --workers 2
-```
+## Local development
 
-Stop any existing API container first (`docker compose stop api`) to free port 8000.
-Two workers allow up to 20 application database connections with the defaults, plus
-migration and administration connections. Each worker admits eight coordination operations;
-choose worker counts within the database's available connection capacity. All workers must
-use the same identity encoding and transformer version and connect directly to PostgreSQL.
-Separate-process coordination is verified by B14; this is not a throughput benchmark.
-
-For an isolated clean build and persistence check, run `python3 scripts/verify_deployment.py`.
-It requires Docker Compose 2.24.4 or newer for port overrides. It creates fresh credentials,
-an automatically assigned localhost API port, and a separate volume, then stops its containers
-while retaining that volume for inspection. See [deployment evidence](docs/verification.md#docker-deployment)
-for the checks and their scope.
-
-## Command shortcuts
-
-An optional Makefile provides `make up`, `make down`, `make logs`, `make test`, `make test-integration`, `make lint`, and `make migrate`. Run `make help` to list them. Run these commands from this directory.
-
-`make up` starts Compose in the background. `make migrate` applies migrations through the Compose migration service; local Python development uses `uv run alembic upgrade head`. Integration tests require an exported `TEST_DATABASE_URL` pointing to a migrated database. Stopping containers preserves the database volume.
-
-The direct commands in this guide remain available without Make.
-
-## Local Python development
-
-Requires Python 3.12–3.14 and uv. Start PostgreSQL first:
+Requires Python 3.12–3.14, uv, and PostgreSQL. To run the API locally with the Compose database:
 
 ```sh
-python3 scripts/configure_local.py  # once, before starting Compose
+python3 scripts/configure_local.py  # first setup only
 docker compose up -d database
 uv sync --locked
 uv run alembic upgrade head
 uv run uvicorn cache_service.main:create_app --factory
 ```
 
-The application builds its connection URL from `DB_HOST` (default `127.0.0.1`), `DB_PORT` (5432), `DB_USER` (`cache`), `DB_NAME` (`cache`), and required `DB_PASS`. Credentials are URL-escaped and masked in diagnostics. An optional nonempty `DATABASE_URL` overrides these connection values, preserving existing local configurations; omit it when using separate `DB_*` settings. Compose supplies separate settings and does not forward that local override. Initial pool capacity is ten connections per process, with no overflow; connection checkout, connection establishment, and ordinary database statements each have a five-second budget. These are configurable starting values, not performance claims. Coordination admits at most eight active misses per process, reserving two pool connections for ordinary operations. Admission has a five-second budget; advisory waiting has 35 seconds, transformation 30 seconds, and cleanup five seconds. See [configuration](docs/configuration.md) for settings, validation, and Compose overrides. COORDINATION_SLOTS must be lower than POOL_SIZE. Count both holders and lock waiters toward coordination capacity. Across N workers, allow up to N × POOL_SIZE database connections, plus migration and administration connections. Each worker uses one application engine; additional engines have independent pools and admission limits. Transaction-mode PgBouncer is unsupported.
+Application settings read environment variables and `.env`. Database configuration uses
+`DB_HOST`, `DB_PORT`, `DB_USER`, `DB_NAME`, and `DB_PASS`; an optional `DATABASE_URL`
+overrides them for local Python execution. Compose connects its application containers to
+`database:5432` regardless of the published host port.
 
-## Limitations
+Keep `.env` out of Git. Changing its password does not rotate credentials in an existing
+database volume. See the [configuration reference](docs/configuration.md) for settings,
+Compose overrides, and worker connection budgets.
 
-The transformer uses Python Unicode uppercase conversion (`uppercase-v1`). A replacement
-must be asynchronous and use a new version when its semantics change. Missing strings are
-processed sequentially; external calls retain a pooled connection and session lock. Direct
-PostgreSQL connections are required. Tests establish controlled coordination and recovery,
-without establishing production throughput or exactly-once external execution across crashes.
+Source lives in [`src/cache_service/`](src/cache_service/), migrations in
+[`migrations/versions/`](migrations/versions/), and tests in [`tests/`](tests/).
+Schema changes use Alembic migrations; API startup does not create tables.
+Run `make help` for optional command shortcuts.
 
-Stored sources, canonical inputs, and outputs are plaintext in PostgreSQL. No authentication,
-automatic expiry, deletion API, or transport-level request-body limit is provided. Compose
-binds published ports to localhost. Character limits apply after JSON parsing and do not bound
-raw request bytes or uppercase expansion. API validation errors may include submitted values;
-operational errors and CLI diagnostics use generic messages. Complete committed data survives
-container recreation while the volume remains; backup and restore are outside current verification.
-Docker installs dependency ranges, while local development and CI use `uv.lock`.
-
-## Verification
+## Testing
 
 ```sh
 uv run ruff check .
 uv run pytest -m 'not integration'
-uv run python -c 'import os, subprocess, sys; from cache_service.config import Settings; os.environ["TEST_DATABASE_URL"] = Settings().database_url.get_secret_value(); raise SystemExit(subprocess.call([sys.executable, "-m", "pytest", "-m", "integration"]))'
 ```
 
-Integration tests require migrations to have been applied. They exercise readiness and payload
-creation, reads, reuse, restart, publication conflicts, collisions, failure, and deadlines against
-PostgreSQL. Without `TEST_DATABASE_URL`, they skip explicitly. Payload tests remove their own
-uniquely marked rows; no test drops or recreates a database.
+Integration tests require a migrated PostgreSQL database. To use the database configured
+by your local application settings without printing its credentials:
 
-Foundation verification passed on 2026-10-06: dependency resolution and `uv.lock` generation, Ruff, all three foundation tests (including real PostgreSQL readiness), Docker image build, clean migration revision `0001`, and both health endpoints. Approved execution outside the sandbox was required. If port 5432 is occupied, use `DB_PORT=55432 docker compose up --build -d` and point local database URLs at port 55432. Docker currently installs the version ranges from `pyproject.toml`; the local uv environment uses the lockfile.
+```sh
+uv run alembic upgrade head
+uv run python - <<'PYTHON'
+import os
+import subprocess
+import sys
 
-The migration environment follows [Alembic's async migration recipe](https://alembic.sqlalchemy.org/en/latest/cookbook.html#using-asyncio-with-alembic). Migrations run explicitly; API workers do not create tables during startup.
+from cache_service.config import Settings
 
-Keep `.env` out of Git and avoid printing connection strings or expanded Compose configuration. Settings mask the database URL in diagnostics. Changing `DB_PASS` in `.env` does not change the password in an existing PostgreSQL volume; update the database role when rotating credentials.
+os.environ["TEST_DATABASE_URL"] = Settings().database_url.get_secret_value()
+raise SystemExit(subprocess.call([sys.executable, "-m", "pytest", "-m", "integration"]))
+PYTHON
+```
+
+If `TEST_DATABASE_URL` is already exported, run `make test-integration` instead.
+Integration tests skip when that variable is absent. Tests cover persistence, cache reuse,
+concurrent requests, failure recovery, and the CLI against a live API.
+The [verification guide](docs/verification.md) maps guarantees to tests and documents
+an isolated Docker deployment check.
 
 ## Continuous integration
 
-[CI workflow](.github/workflows/ci.yml) runs on every pull request and push to `main`. One Ubuntu job uses Python 3.12, uv 0.9.5, and the committed `uv.lock`. It runs these established commands:
+The [GitHub Actions workflow](.github/workflows/ci.yml) checks pull requests and pushes
+to `main`. It installs locked dependencies, runs Ruff and unit tests, applies migrations
+to PostgreSQL 17, runs integration tests, and builds the Docker image.
+Local development and CI use `uv.lock`; the Dockerfile installs dependency ranges
+from `pyproject.toml`.
 
-```sh
-uv sync --locked
-make lint
-make test
-uv run alembic upgrade head
-make test-integration
-docker build --tag cache-service:ci .
-```
+## Guarantees and limitations
 
-CI sets `UV_PYTHON=3.12` and `UV_LOCKED=true`, so subsequent `uv run` commands also reject a stale lockfile. Application and migration settings use `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_NAME`, and `DB_PASS`, pointing to a health-checked PostgreSQL 17 service. The integration step derives `TEST_DATABASE_URL` from those same settings without printing it. Its disposable credentials are only for that run and require no repository secrets. For local checks, use your own migrated database URLs; avoid copying CI credentials into persistent environments.
+Successful transformations are reused across payloads and retained when later work fails.
+Only complete payloads are published. PostgreSQL advisory locks coordinate shared missing
+strings across cooperating workers, with bounded waits and request deadlines. Crashes or
+connection loss can cause repeated transformation calls; exactly-once external execution
+is not guaranteed.
 
-The job has read-only repository permissions, a 15-minute timeout, and cancels superseded runs for the same branch or pull request. Checkout does not retain credentials. External actions are pinned to commit SHAs verified against their upstream release tags. See [setup-uv documentation](https://github.com/astral-sh/setup-uv/tree/v6.0.1) and [GitHub PostgreSQL service documentation](https://docs.github.com/en/actions/tutorials/use-containerized-services/create-postgresql-service-containers).
+Missing strings are processed sequentially, holding a database connection during each
+transformation. Direct PostgreSQL connections are required; transaction-mode PgBouncer is
+unsupported. Controlled concurrency tests establish correctness, not production throughput.
 
-Local acceptance evidence is recorded in the [backlog](docs/backlog.md#ci-acceptance-evidence). The recorded hosted CI run passed; it predates later implementation steps, so final review must check the current revision separately. Docker build verification uses the existing Dockerfile, which installs dependency ranges rather than the uv lockfile.
+Inputs and outputs are stored in plaintext. The service has no authentication, automatic
+expiry, deletion API, or raw request-body byte limit. Character limits apply after JSON
+parsing, and validation errors may include submitted values. Backup and restore are outside
+the current verification scope.
 
-## Database container environment boundary
+## Documentation
 
-Project configuration uses `DB_*` names, with no application-specific environment prefix. The [official PostgreSQL image](https://hub.docker.com/_/postgres) requires `POSTGRES_USER`, `POSTGRES_DB`, and `POSTGRES_PASSWORD` internally. Compose maps `DB_USER`, `DB_NAME`, and `DB_PASS` to those image keys; CI supplies matching disposable values at the same boundary. The application does not read the image-specific names. Existing volumes retain their database, role, and password: changing environment values does not rename them or rotate credentials.
+- [API contract](docs/api-contract.md): request schemas, responses, limits, and deadlines
+- [Configuration](docs/configuration.md): database settings and deployment capacity
+- [Architecture](docs/architecture.md): cache identity, transactions, and coordination
+- [Verification](docs/verification.md): test coverage and deployment checks
+- [Requirements](docs/requirements.md): assessment requirements and acceptance criteria
