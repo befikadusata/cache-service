@@ -21,3 +21,6 @@ dist/
 
 # Personal material belongs outside this repository
 /private-preparation/
+
+# Local work tracking
+/docs/backlog.md
